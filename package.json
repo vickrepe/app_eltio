@@ -1,5 +1,5 @@
 {
-  "name": "app_eltio_tmp",
+  "name": "app-eltio",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
