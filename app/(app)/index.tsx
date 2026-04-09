@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   ActivityIndicator, ScrollView, Modal, Platform,
-  KeyboardAvoidingView, Alert,
+  KeyboardAvoidingView, Alert, useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../../lib/store';
@@ -27,6 +27,19 @@ function todayISO(): string {
 
 function todayDisplay(): string {
   return formatFecha(todayISO());
+}
+
+/** Diálogo de confirmación compatible con web y mobile */
+function confirmar(mensaje: string): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(window.confirm(mensaje));
+  }
+  return new Promise((resolve) => {
+    Alert.alert('Confirmar', mensaje, [
+      { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Aceptar', onPress: () => resolve(true) },
+    ]);
+  });
 }
 
 /** Calcula el saldo acumulado por fila.
@@ -181,7 +194,8 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
   const textStyle = { fontSize: 13, textDecorationLine: tachado ? 'line-through' as const : 'none' as const };
 
   const handleAnular = async () => {
-    if (!window.confirm(`¿Anular este movimiento? El saldo se actualizará.`)) return;
+    const ok = await confirmar('¿Anular este movimiento? El saldo se actualizará.');
+    if (!ok) return;
     setLoading(true);
     await cancelarTransaccion(tx.id, clientId);
     setLoading(false);
@@ -257,7 +271,8 @@ function ClienteDetalle({ clientId }: { clientId: string }) {
   const ultimaEntrega = transactions.find((t) => t.entrega > 0 && !t.anulada);
 
   const handleArchivar = async () => {
-    if (!window.confirm(`¿Archivar a ${client.nombre}? Va a desaparecer de la lista pero se conserva su historial.`)) return;
+    const ok = await confirmar(`¿Archivar a ${client.nombre}? Va a desaparecer de la lista pero se conserva su historial.`);
+    if (!ok) return;
     await archivarCliente(clientId);
   };
 
@@ -388,10 +403,13 @@ export default function ClientesScreen() {
     clients, clientsLoading, loadClients,
     organization, selectedClientId, selectClient,
   } = useAppStore();
-  const router  = useRouter();
-  const isWeb   = Platform.OS === 'web';
+  const router     = useRouter();
+  const { width }  = useWindowDimensions();
+  const isDesktop  = Platform.OS === 'web' && width >= 768;
+  const isWeb      = Platform.OS === 'web';
   const [search, setSearch] = useState('');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
+  const [mobileDetalle, setMobileDetalle] = useState(false);
 
   useEffect(() => {
     if (organization) loadClients();
@@ -407,8 +425,12 @@ export default function ClientesScreen() {
     .reduce((acc, c) => acc + (c.saldo ?? 0), 0);
 
   const handleSelectClient = (clientId: string) => {
-    if (isWeb) {
+    if (isDesktop) {
       selectClient(clientId);
+    } else if (isWeb) {
+      // móvil web: mostrar detalle en la misma pantalla
+      selectClient(clientId);
+      setMobileDetalle(true);
     } else {
       router.push(`/cliente/${clientId}`);
     }
@@ -485,12 +507,32 @@ export default function ClientesScreen() {
     </View>
   );
 
+  // Móvil web: mostrar detalle con botón atrás
+  if (isWeb && !isDesktop && mobileDetalle && selectedClientId) {
+    return (
+      <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          onPress={() => { setMobileDetalle(false); selectClient(null); }}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            paddingHorizontal: 16, paddingVertical: 12,
+            backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+          }}
+        >
+          <Text style={{ fontSize: 18, color: '#2563eb' }}>←</Text>
+          <Text style={{ color: '#2563eb', fontWeight: '500' }}>Volver a clientes</Text>
+        </TouchableOpacity>
+        <ClienteDetalle clientId={selectedClientId} />
+      </View>
+    );
+  }
+
   return (
-    <View style={{ flex: 1, flexDirection: isWeb ? 'row' : 'column' }}>
+    <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column' }}>
       {ListaPanel}
 
-      {/* Panel derecho — solo en web */}
-      {isWeb && (
+      {/* Panel derecho — solo en desktop web */}
+      {isDesktop && (
         <View style={{ flex: 1 }}>
           {selectedClientId ? (
             <ClienteDetalle clientId={selectedClientId} />
