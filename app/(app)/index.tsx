@@ -7,23 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../../lib/store';
 import type { Client, Transaction, TransactionWithSaldo } from '../../types';
-
-// ─── Helpers ────────────────────────────────────────────────
-
-function formatARS(n: number): string {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency', currency: 'ARS', maximumFractionDigits: 0,
-  }).format(Math.abs(n));
-}
-
-function formatFecha(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-}
-
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
-}
+import { formatARS, formatFecha, todayISO } from '../../lib/format';
 
 function todayDisplay(): string {
   return formatFecha(todayISO());

@@ -5,17 +5,7 @@ import {
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useAppStore } from '../../lib/store';
 import type { Transaction, TransactionWithSaldo } from '../../types';
-
-function formatARS(n: number): string {
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency', currency: 'ARS', maximumFractionDigits: 0,
-  }).format(Math.abs(n));
-}
-
-function formatFecha(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-}
+import { formatARS, formatFecha } from '../../lib/format';
 
 function calcularSaldos(txs: Transaction[]): TransactionWithSaldo[] {
   const asc = [...txs].reverse();
