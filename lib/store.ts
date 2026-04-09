@@ -172,7 +172,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   cancelarTransaccion: async (transactionId, clientId) => {
     const { error } = await supabase
       .from('transactions')
-      .update({ anulada: true })
+      .delete()
       .eq('id', transactionId);
 
     if (error) return error.message;

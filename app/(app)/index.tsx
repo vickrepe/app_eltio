@@ -26,13 +26,12 @@ function confirmar(mensaje: string): Promise<boolean> {
   });
 }
 
-/** Calcula el saldo acumulado por fila.
- *  Las transacciones anuladas no afectan el saldo pero siguen visibles. */
+/** Calcula el saldo acumulado corriendo por fila (más antigua → más reciente). */
 function calcularSaldos(txs: Transaction[]): TransactionWithSaldo[] {
   const asc = [...txs].reverse();
   let acum = 0;
   return asc.map((tx) => {
-    if (!tx.anulada) acum += tx.debe - tx.entrega;
+    acum += tx.debe - tx.entrega;
     return { ...tx, saldo_acumulado: acum };
   }).reverse();
 }
@@ -77,13 +76,17 @@ function ClientRow({ client, selected, onPress }: {
 function KPI({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View style={{
-      flex: 1, backgroundColor: '#f8fafc', borderRadius: 12,
-      padding: 14, marginHorizontal: 4,
+      flex: 1, backgroundColor: '#f8fafc', borderRadius: 10,
+      padding: 10, marginHorizontal: 3,
     }}>
-      <Text style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+      <Text style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4 }}
+        numberOfLines={1}>
         {label}
       </Text>
-      <Text style={{ fontSize: 20, fontWeight: '700', color, marginTop: 4 }}>{value}</Text>
+      <Text style={{ fontSize: 15, fontWeight: '700', color, marginTop: 3 }}
+        numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -169,69 +172,81 @@ function MovimientoForm({ clientId, onClose }: { clientId: string; onClose: () =
 
 // ─── Panel derecho: ficha del cliente ───────────────────────
 
+// Anchos fijos de columnas (en px)
+const COL = { fecha: 80, debe: 72, entrega: 72, saldo: 72, trash: 30 };
+
 function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId: string }) {
   const { cancelarTransaccion } = useAppStore();
   const [hoverTrash, setHoverTrash] = useState(false);
   const [loading, setLoading]       = useState(false);
 
-  const tachado = tx.anulada;
-  const textStyle = { fontSize: 13, textDecorationLine: tachado ? 'line-through' as const : 'none' as const };
-
-  const handleAnular = async () => {
-    const ok = await confirmar('¿Anular este movimiento? El saldo se actualizará.');
+  const handleEliminar = async () => {
+    const ok = await confirmar('¿Eliminar este movimiento? El saldo se actualizará.');
     if (!ok) return;
     setLoading(true);
     await cancelarTransaccion(tx.id, clientId);
     setLoading(false);
   };
 
+  const { width: sw } = useWindowDimensions();
+  const narrow = sw < 768;
+  const fs = narrow ? 11 : 13;
+  const ph = narrow ? 8 : 28;
+
   return (
     <View style={{
-      flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: 28, paddingVertical: 11,
+      flexDirection: 'row', alignItems: 'flex-start',
+      paddingHorizontal: ph, paddingVertical: 9,
       borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
-      opacity: tachado ? 0.5 : 1,
     }}>
-      <Text style={{ ...textStyle, flex: 1, color: '#475569' }}>
+      {/* FECHA */}
+      <Text style={{ width: COL.fecha, fontSize: fs, color: '#475569' }} numberOfLines={1}>
         {formatFecha(tx.fecha)}
       </Text>
+      {/* DEBE */}
       <Text style={{
-        ...textStyle, flex: 1, textAlign: 'right',
+        width: COL.debe, fontSize: fs, textAlign: 'right',
         color: tx.debe > 0 ? '#ef4444' : '#cbd5e1',
         fontWeight: tx.debe > 0 ? '600' : '400',
-      }}>
+      }} numberOfLines={1}>
         {tx.debe > 0 ? formatARS(tx.debe) : '—'}
       </Text>
+      {/* ENTREGA */}
       <Text style={{
-        ...textStyle, flex: 1, textAlign: 'right',
+        width: COL.entrega, fontSize: fs, textAlign: 'right',
         color: tx.entrega > 0 ? '#22c55e' : '#cbd5e1',
         fontWeight: tx.entrega > 0 ? '600' : '400',
-      }}>
+      }} numberOfLines={1}>
         {tx.entrega > 0 ? formatARS(tx.entrega) : '—'}
       </Text>
+      {/* SALDO */}
       <Text style={{
-        ...textStyle, flex: 1, textAlign: 'right', fontWeight: '700',
-        color: tachado ? '#94a3b8' : tx.saldo_acumulado > 0 ? '#ef4444' : tx.saldo_acumulado < 0 ? '#2563eb' : '#64748b',
-      }}>
-        {tachado ? '—' : formatARS(tx.saldo_acumulado)}
+        width: COL.saldo, fontSize: fs, textAlign: 'right', fontWeight: '700',
+        color: tx.saldo_acumulado > 0 ? '#ef4444' : tx.saldo_acumulado < 0 ? '#2563eb' : '#64748b',
+      }} numberOfLines={1}>
+        {formatARS(tx.saldo_acumulado)}
       </Text>
-      <Text style={{ ...textStyle, flex: 2, fontSize: 13, color: '#94a3b8', paddingLeft: 12 }} numberOfLines={1}>
-        {tachado ? 'ANULADA' : (tx.observaciones ?? '—')}
+      {/* OBSERVACIONES — crece verticalmente */}
+      <Text style={{ flex: 1, fontSize: fs, color: '#94a3b8', paddingLeft: 8 }}>
+        {tx.observaciones ?? '—'}
       </Text>
-      {/* Papelera */}
+      {/* PAPELERA */}
       <TouchableOpacity
-        onPress={handleAnular}
-        disabled={tachado || loading}
-        // @ts-ignore — onMouseEnter/Leave son válidos en web
+        onPress={handleEliminar}
+        disabled={loading}
+        // @ts-ignore
         onMouseEnter={() => setHoverTrash(true)}
         onMouseLeave={() => setHoverTrash(false)}
         style={{
-          width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center',
-          backgroundColor: tachado ? 'transparent' : hoverTrash ? '#fee2e2' : 'transparent',
-          marginLeft: 8,
+          width: COL.trash, height: 22, borderRadius: 6,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: hoverTrash ? '#fee2e2' : 'transparent',
         }}
       >
-        <Text style={{ fontSize: 14, opacity: tachado ? 0.2 : hoverTrash ? 1 : 0.4 }}>🗑</Text>
+        {loading
+          ? <ActivityIndicator size="small" color="#ef4444" />
+          : <Text style={{ fontSize: 13, opacity: hoverTrash ? 1 : 0.4 }}>🗑</Text>
+        }
       </TouchableOpacity>
     </View>
   );
@@ -239,6 +254,8 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
 
 function ClienteDetalle({ clientId }: { clientId: string }) {
   const { clients, transactions, transactionsLoading, archivarCliente } = useAppStore();
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrow = screenWidth < 768;
   const [showForm, setShowForm]       = useState(false);
   const [hoverArchivar, setHoverArchivar] = useState(false);
 
@@ -267,41 +284,40 @@ function ClienteDetalle({ clientId }: { clientId: string }) {
         backgroundColor: '#fff', paddingHorizontal: 28, paddingVertical: 20,
         borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
       }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={{ flexDirection: isNarrow ? 'column' : 'row', justifyContent: 'space-between', gap: 10 }}>
           <View>
-            <Text style={{ fontSize: 22, fontWeight: '700', color: '#1e293b' }}>{client.nombre}</Text>
+            <Text style={{ fontSize: isNarrow ? 18 : 22, fontWeight: '700', color: '#1e293b' }}>{client.nombre}</Text>
             {client.telefono
-              ? <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>{client.telefono}</Text>
+              ? <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{client.telefono}</Text>
               : null}
-            <Text style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>Hoy: {todayDisplay()}</Text>
+            <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Hoy: {todayDisplay()}</Text>
           </View>
 
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            {/* Botón archivar */}
             <TouchableOpacity
               onPress={handleArchivar}
               // @ts-ignore
               onMouseEnter={() => setHoverArchivar(true)}
               onMouseLeave={() => setHoverArchivar(false)}
               style={{
-                paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+                paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
                 backgroundColor: hoverArchivar ? '#cbd5e1' : '#e2e8f0',
               }}
             >
-              <Text style={{ color: hoverArchivar ? '#475569' : '#94a3b8', fontWeight: '500', fontSize: 13 }}>
-                Archivar cliente
+              <Text style={{ color: hoverArchivar ? '#475569' : '#94a3b8', fontWeight: '500', fontSize: 12 }}>
+                Archivar
               </Text>
             </TouchableOpacity>
 
-            {/* Botón nuevo movimiento */}
             <TouchableOpacity
               onPress={() => setShowForm(true)}
               style={{
-                backgroundColor: '#2563eb', paddingHorizontal: 18, paddingVertical: 10,
-                borderRadius: 10,
+                flex: isNarrow ? 1 : undefined,
+                backgroundColor: '#2563eb', paddingHorizontal: 14, paddingVertical: 9,
+                borderRadius: 9, alignItems: 'center',
               }}
             >
-              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>+ Nuevo movimiento</Text>
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>+ Nuevo movimiento</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -335,19 +351,16 @@ function ClienteDetalle({ clientId }: { clientId: string }) {
           <View>
             {/* Encabezado */}
             <View style={{
-              flexDirection: 'row', paddingHorizontal: 28, paddingVertical: 10,
+              flexDirection: 'row', alignItems: 'center',
+              paddingHorizontal: isNarrow ? 8 : 28, paddingVertical: 8,
               borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f1f5f9',
             }}>
-              {['FECHA', 'DEBE', 'ENTREGA', 'SALDO', 'OBSERVACIONES'].map((h, i) => (
-                <Text key={h} style={{
-                  flex: i === 4 ? 2 : 1, fontSize: 11, fontWeight: '600', color: '#64748b',
-                  textTransform: 'uppercase', letterSpacing: 0.5,
-                  textAlign: i > 0 && i < 4 ? 'right' : 'left',
-                }}>
-                  {h}
-                </Text>
-              ))}
-              <View style={{ width: 36 }} />
+              <Text style={{ width: COL.fecha, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>FECHA</Text>
+              <Text style={{ width: COL.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>DEBE</Text>
+              <Text style={{ width: COL.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>ENTREGA</Text>
+              <Text style={{ width: COL.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
+              <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingLeft: 8 }}>OBSERVACIONES</Text>
+              <View style={{ width: COL.trash }} />
             </View>
 
             {/* Filas */}
@@ -423,10 +436,10 @@ export default function ClientesScreen() {
   // ── Panel izquierdo (lista) ──
   const ListaPanel = (
     <View style={{
-      width: isWeb ? 300 : undefined,
-      flex: isWeb ? undefined : 1,
+      width: isDesktop ? 300 : undefined,
+      flex: isDesktop ? undefined : 1,
       backgroundColor: '#fff',
-      borderRightWidth: isWeb ? 1 : 0,
+      borderRightWidth: isDesktop ? 1 : 0,
       borderRightColor: '#e2e8f0',
     }}>
       {/* Totalizador */}
