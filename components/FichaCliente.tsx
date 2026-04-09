@@ -209,6 +209,82 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
   );
 }
 
+// ─── EditarClienteModal ──────────────────────────────────────
+
+function EditarClienteModal({ client, onClose }: { client: Client; onClose: () => void }) {
+  const { updateClient } = useAppStore();
+  const [nombre, setNombre]     = useState(client.nombre);
+  const [telefono, setTelefono] = useState(client.telefono ?? '');
+  const [notas, setNotas]       = useState(client.notas ?? '');
+  const [loading, setLoading]   = useState(false);
+
+  const handleGuardar = async () => {
+    if (!nombre.trim()) { Alert.alert('Requerido', 'El nombre es obligatorio'); return; }
+    setLoading(true);
+    const err = await updateClient(client.id, { nombre, telefono, notas });
+    setLoading(false);
+    if (err) { Alert.alert('Error', err); return; }
+    onClose();
+  };
+
+  const labelStyle = { fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 };
+  const inputStyle = {
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+    fontSize: 15, color: '#1e293b',
+  };
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center', alignItems: 'center', padding: 20,
+      }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', maxWidth: 420 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24 }}>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1e293b', marginBottom: 16 }}>
+              Editar cliente
+            </Text>
+            <View style={{ gap: 12 }}>
+              <View>
+                <Text style={labelStyle}>Nombre *</Text>
+                <TextInput style={inputStyle} placeholder="Ej: Juan Pérez"
+                  placeholderTextColor="#94a3b8" value={nombre} onChangeText={setNombre}
+                  autoCapitalize="words" />
+              </View>
+              <View>
+                <Text style={labelStyle}>Teléfono</Text>
+                <TextInput style={inputStyle} placeholder="Ej: 11 1234-5678"
+                  placeholderTextColor="#94a3b8" value={telefono} onChangeText={setTelefono} />
+              </View>
+              <View>
+                <Text style={labelStyle}>Notas</Text>
+                <TextInput style={[inputStyle, { minHeight: 60 }]}
+                  placeholder="Información adicional..."
+                  placeholderTextColor="#94a3b8" value={notas} onChangeText={setNotas}
+                  multiline textAlignVertical="top" />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity onPress={onClose}
+                  style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center' }}>
+                  <Text style={{ color: '#64748b', fontWeight: '600' }}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleGuardar} disabled={loading}
+                  style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: '#2563eb', alignItems: 'center' }}>
+                  {loading
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar cambios</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── ClienteDetalle ──────────────────────────────────────────
 
 export function ClienteDetalle({ client }: { client: Client }) {
@@ -216,7 +292,9 @@ export function ClienteDetalle({ client }: { client: Client }) {
   const { width: screenWidth } = useWindowDimensions();
   const isNarrow = screenWidth < 768;
   const [showForm, setShowForm]           = useState(false);
+  const [showEditar, setShowEditar]       = useState(false);
   const [hoverArchivar, setHoverArchivar] = useState(false);
+  const [hoverEditar, setHoverEditar]     = useState(false);
 
   const saldo    = client.saldo ?? 0;
   const esAFavor = saldo < 0;
@@ -235,6 +313,11 @@ export function ClienteDetalle({ client }: { client: Client }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+      {/* Modal editar */}
+      {showEditar && (
+        <EditarClienteModal client={client} onClose={() => setShowEditar(false)} />
+      )}
+
       {/* Header */}
       <View style={{
         backgroundColor: '#fff', paddingHorizontal: 28, paddingVertical: 20,
@@ -251,20 +334,35 @@ export function ClienteDetalle({ client }: { client: Client }) {
 
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             {!client.es_caja && (
-              <TouchableOpacity
-                onPress={handleArchivar}
-                // @ts-ignore
-                onMouseEnter={() => setHoverArchivar(true)}
-                onMouseLeave={() => setHoverArchivar(false)}
-                style={{
-                  paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
-                  backgroundColor: hoverArchivar ? '#cbd5e1' : '#e2e8f0',
-                }}
-              >
-                <Text style={{ color: hoverArchivar ? '#475569' : '#94a3b8', fontWeight: '500', fontSize: 12 }}>
-                  Archivar
-                </Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={() => setShowEditar(true)}
+                  // @ts-ignore
+                  onMouseEnter={() => setHoverEditar(true)}
+                  onMouseLeave={() => setHoverEditar(false)}
+                  style={{
+                    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+                    backgroundColor: hoverEditar ? '#e0f2fe' : '#e2e8f0',
+                  }}
+                >
+                  <Text style={{ fontSize: 14 }}>✏️</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleArchivar}
+                  // @ts-ignore
+                  onMouseEnter={() => setHoverArchivar(true)}
+                  onMouseLeave={() => setHoverArchivar(false)}
+                  style={{
+                    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+                    backgroundColor: hoverArchivar ? '#cbd5e1' : '#e2e8f0',
+                  }}
+                >
+                  <Text style={{ color: hoverArchivar ? '#475569' : '#94a3b8', fontWeight: '500', fontSize: 12 }}>
+                    Archivar
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
 
             <TouchableOpacity

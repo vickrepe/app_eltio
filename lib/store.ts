@@ -46,6 +46,7 @@ interface AppState {
 
   // Acciones de clientes
   archivarCliente: (clientId: string) => Promise<string | null>;
+  updateClient: (clientId: string, data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -215,6 +216,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (error) return error.message;
     await get().loadClients();
     set({ selectedClientId: null, transactions: [] });
+    return null;
+  },
+
+  updateClient: async (clientId, { nombre, telefono, notas }) => {
+    const { error } = await supabase
+      .from('clients')
+      .update({
+        nombre:   nombre.trim(),
+        telefono: telefono.trim() || null,
+        notas:    notas.trim()    || null,
+      })
+      .eq('id', clientId);
+
+    if (error) return error.message;
+    await get().loadClients();
     return null;
   },
 }));
