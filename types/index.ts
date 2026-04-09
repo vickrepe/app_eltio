@@ -23,6 +23,7 @@ export interface Client {
   telefono: string | null;
   notas: string | null;
   activo: boolean;
+  es_caja: boolean;
   created_at: string;
   saldo?: number; // calculado: sum(debe) - sum(entrega). positivo = debe, negativo = a favor
 }

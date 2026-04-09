@@ -35,6 +35,13 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="caja"
+        options={{
+          title: 'Caja',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🏧" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',

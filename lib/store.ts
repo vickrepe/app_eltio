@@ -15,6 +15,7 @@ interface AppState {
   clients:        Client[];
   clientsLoading: boolean;
   selectedClientId: string | null;
+  cajaClient: Client | null;
 
   // Transacciones del cliente seleccionado
   transactions:        Transaction[];
@@ -28,6 +29,7 @@ interface AppState {
 
   // Acciones de clientes
   loadClients: () => Promise<void>;
+  loadCaja: () => Promise<void>;
   selectClient: (clientId: string | null) => void;
   createClient: (data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
 
@@ -55,6 +57,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clients:          [],
   clientsLoading:   false,
   selectedClientId: null,
+  cajaClient:       null,
   transactions:        [],
   transactionsLoading: false,
 
@@ -108,10 +111,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       .select('*')
       .eq('org_id', organization.id)
       .eq('activo', true)
+      .eq('es_caja', false)
       .order('nombre');
 
     if (!error && data) set({ clients: data as Client[] });
     set({ clientsLoading: false });
+  },
+
+  loadCaja: async () => {
+    const { organization } = get();
+    if (!organization) return;
+
+    const { data } = await supabase
+      .from('clients_with_balance')
+      .select('*')
+      .eq('org_id', organization.id)
+      .eq('es_caja', true)
+      .single();
+
+    if (data) set({ cajaClient: data as Client });
   },
 
   selectClient: (clientId) => {
@@ -165,7 +183,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
 
     if (error) return error.message;
-    await Promise.all([get().loadClients(), get().loadTransactions(client_id)]);
+    const isCaja = get().cajaClient?.id === client_id;
+    await Promise.all([
+      isCaja ? get().loadCaja() : get().loadClients(),
+      get().loadTransactions(client_id),
+    ]);
     return null;
   },
 
@@ -176,7 +198,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       .eq('id', transactionId);
 
     if (error) return error.message;
-    await Promise.all([get().loadClients(), get().loadTransactions(clientId)]);
+    const isCaja = get().cajaClient?.id === clientId;
+    await Promise.all([
+      isCaja ? get().loadCaja() : get().loadClients(),
+      get().loadTransactions(clientId),
+    ]);
     return null;
   },
 
