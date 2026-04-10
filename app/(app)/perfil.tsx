@@ -7,23 +7,27 @@ import { useAppStore } from '../../lib/store';
 
 function InvitarUsuario() {
   const { inviteUser } = useAppStore();
-  const [email, setEmail]   = useState('');
-  const [nombre, setNombre] = useState('');
-  const [rol, setRol]       = useState<'owner' | 'employee'>('employee');
+  const [email, setEmail]     = useState('');
+  const [nombre, setNombre]   = useState('');
+  const [rol, setRol]         = useState<'owner' | 'employee'>('employee');
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleInvitar = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
     if (!email.trim() || !nombre.trim()) {
-      Alert.alert('Requerido', 'Completá el nombre y el email');
+      setErrorMsg('Completá el nombre y el email');
       return;
     }
     setLoading(true);
     const err = await inviteUser({ email: email.trim(), nombre: nombre.trim(), rol });
     setLoading(false);
-    if (err) { Alert.alert('Error', err); return; }
-    Alert.alert('Invitación enviada', `Se envió un correo a ${email.trim()} para que configure su contraseña.`);
-    setEmail(''); setNombre(''); setRol('employee'); setExpanded(false);
+    if (err) { setErrorMsg(err); return; }
+    setSuccessMsg(`Invitación enviada a ${email.trim()}`);
+    setEmail(''); setNombre(''); setRol('employee');
   };
 
   const inputStyle = {
@@ -95,6 +99,17 @@ function InvitarUsuario() {
               ))}
             </View>
           </View>
+
+          {errorMsg && (
+            <View style={{ backgroundColor: '#fee2e2', borderRadius: 8, padding: 10 }}>
+              <Text style={{ color: '#dc2626', fontSize: 13 }}>{errorMsg}</Text>
+            </View>
+          )}
+          {successMsg && (
+            <View style={{ backgroundColor: '#dcfce7', borderRadius: 8, padding: 10 }}>
+              <Text style={{ color: '#16a34a', fontSize: 13 }}>{successMsg}</Text>
+            </View>
+          )}
 
           <TouchableOpacity
             onPress={handleInvitar}
