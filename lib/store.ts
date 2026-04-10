@@ -230,17 +230,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   inviteUser: async ({ email, nombre, rol }) => {
-    const { data, error } = await supabase.functions.invoke('invite-user', {
-      body: { email, nombre, rol },
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return 'Sin sesión activa';
+
+    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/invite-user`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+      },
+      body: JSON.stringify({ email, nombre, rol }),
     });
-    if (error) {
-      try {
-        const body = await (error as any).context?.json?.();
-        if (body?.error) return body.error;
-      } catch {}
-      return error.message;
-    }
-    if (data?.error) return data.error;
+
+    const body = await res.json();
+    if (!res.ok) return body.error ?? `Error ${res.status}`;
     return null;
   },
 

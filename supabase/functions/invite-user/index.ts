@@ -55,6 +55,7 @@ Deno.serve(async (req: Request) => {
     );
 
     if (inviteError) {
+      console.error('inviteError:', inviteError.message);
       return new Response(JSON.stringify({ error: inviteError.message }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -69,6 +70,7 @@ Deno.serve(async (req: Request) => {
     });
 
     if (profileError) {
+      console.error('profileError:', profileError.message);
       return new Response(JSON.stringify({ error: profileError.message }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
