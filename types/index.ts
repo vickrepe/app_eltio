@@ -37,6 +37,7 @@ export interface Transaction {
   observaciones: string | null;
   fecha: string; // ISO date YYYY-MM-DD
   creado_por: string;
+  creado_por_nombre?: string;
   created_at: string;
   anulada: boolean;
 }

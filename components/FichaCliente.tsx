@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useAppStore } from '../lib/store';
 import type { Client, Transaction, TransactionWithSaldo } from '../types';
-import { formatARS, formatFecha, todayISO } from '../lib/format';
+import { formatARS, formatFecha, formatHora, todayISO } from '../lib/format';
 
 function todayDisplay(): string {
   return formatFecha(todayISO());
@@ -141,6 +141,7 @@ function MovimientoForm({ clientId, onClose }: { clientId: string; onClose: () =
 function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId: string }) {
   const { cancelarTransaccion } = useAppStore();
   const [hoverTrash, setHoverTrash] = useState(false);
+  const [showInfo, setShowInfo]     = useState(false);
   const [loading, setLoading]       = useState(false);
 
   const handleEliminar = async () => {
@@ -155,6 +156,8 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
   const narrow = sw < 768;
   const fs = narrow ? 11 : 13;
   const ph = narrow ? 8 : 28;
+  const hora = formatHora(tx.created_at);
+  const usuario = tx.creado_por_nombre ?? 'Desconocido';
 
   return (
     <View style={{
@@ -162,9 +165,50 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
       paddingHorizontal: ph, paddingVertical: 9,
       borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
     }}>
-      <Text style={{ width: COL.fecha, fontSize: fs, color: '#475569' }} numberOfLines={1}>
-        {formatFecha(tx.fecha)}
-      </Text>
+      {/* FECHA — clicable, abre modal con hora y usuario */}
+      <TouchableOpacity
+        onPress={() => setShowInfo(true)}
+        style={{ width: COL.fecha }}
+        activeOpacity={0.7}
+      >
+        <Text style={{
+          fontSize: fs, color: '#2563eb',
+          fontWeight: '600', textDecorationLine: 'underline',
+        }} numberOfLines={1}>
+          {formatFecha(tx.fecha)}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Modal de info */}
+      <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 40 }}
+          activeOpacity={1}
+          onPress={() => setShowInfo(false)}
+        >
+          <View style={{
+            backgroundColor: '#fff', borderRadius: 14, padding: 20,
+            width: 240, gap: 10,
+            shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12,
+          }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b' }}>
+              Detalle del movimiento
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: '#94a3b8' }}>Fecha</Text>
+              <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{formatFecha(tx.fecha)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: '#94a3b8' }}>Hora</Text>
+              <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{hora}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: '#94a3b8' }}>Registrado por</Text>
+              <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{usuario}</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
       <Text style={{
         width: COL.debe, fontSize: fs, textAlign: 'right',
         color: tx.debe > 0 ? '#ef4444' : '#cbd5e1',

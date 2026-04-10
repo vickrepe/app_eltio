@@ -160,12 +160,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const { data, error } = await supabase
       .from('transactions')
-      .select('*')
+      .select('*, profiles!creado_por(nombre)')
       .eq('client_id', clientId)
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false });
 
-    if (!error && data) set({ transactions: data as Transaction[] });
+    if (!error && data) {
+      const flat = data.map((t: any) => ({
+        ...t,
+        creado_por_nombre: t.profiles?.nombre ?? 'Desconocido',
+        profiles: undefined,
+      }));
+      set({ transactions: flat as Transaction[] });
+    }
     set({ transactionsLoading: false });
   },
 

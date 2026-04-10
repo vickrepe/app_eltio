@@ -16,3 +16,11 @@ export function formatFecha(iso: string): string {
 export function todayISO(): string {
   return new Date().toISOString().split('T')[0];
 }
+
+/** Extrae HH:MM de un timestamp ISO (created_at de Supabase) */
+export function formatHora(iso: string): string {
+  const date = new Date(iso);
+  const h = date.getHours().toString().padStart(2, '0');
+  const m = date.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
