@@ -38,9 +38,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (authLoading) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
+    const inAuthGroup    = segments[0] === '(auth)';
+    const inSetPassword  = segments[0] === 'set-password';
 
-    if (!session && !inAuthGroup) {
+    if (!session && !inAuthGroup && !inSetPassword) {
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {
       router.replace('/(app)');
@@ -58,6 +59,7 @@ export default function RootLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(app)" />
+      <Stack.Screen name="set-password" options={{ headerShown: false }} />
       <Stack.Screen
         name="cliente/nuevo"
         options={{

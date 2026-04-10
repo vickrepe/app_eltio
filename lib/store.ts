@@ -47,6 +47,9 @@ interface AppState {
   // Acciones de clientes
   archivarCliente: (clientId: string) => Promise<string | null>;
   updateClient: (clientId: string, data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
+
+  // Usuarios
+  inviteUser: (data: { email: string; nombre: string; rol: string }) => Promise<string | null>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -223,6 +226,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (error) return error.message;
     await get().loadClients();
     set({ selectedClientId: null, transactions: [] });
+    return null;
+  },
+
+  inviteUser: async ({ email, nombre, rol }) => {
+    const { error } = await supabase.functions.invoke('invite-user', {
+      body: { email, nombre, rol },
+    });
+    if (error) return error.message;
     return null;
   },
 
