@@ -256,8 +256,79 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
 
 // ─── EnviarModal ─────────────────────────────────────────────
 
+// Parsea un número guardado en sus 3 partes
+export function parseTelefono(tel: string): { codPais: string; codCiud: string; local: string } {
+  const d = tel.replace(/\D/g, '');
+  if (d.startsWith('54') && d.length > 2) {
+    const rest = d.slice(2);
+    if (rest.startsWith('345') && rest.length > 3) return { codPais: '54', codCiud: '345', local: rest.slice(3) };
+    return { codPais: '54', codCiud: '345', local: rest };
+  }
+  if (d.startsWith('345') && d.length > 3) return { codPais: '54', codCiud: '345', local: d.slice(3) };
+  return { codPais: '54', codCiud: '345', local: d };
+}
+
+// Combina las 3 partes en un string para guardar en DB
+export function combinaTel(codPais: string, codCiud: string, local: string): string {
+  const l = local.replace(/\D/g, '');
+  if (!l) return '';
+  return codPais.replace(/\D/g, '') + codCiud.replace(/\D/g, '') + l;
+}
+
+// ─── TelInput ────────────────────────────────────────────────
+export function TelInput({
+  codPais, codCiud, local,
+  onChangePais, onChangeCiud, onChangeLocal,
+  inputStyle, labelStyle,
+}: {
+  codPais: string; codCiud: string; local: string;
+  onChangePais: (v: string) => void;
+  onChangeCiud: (v: string) => void;
+  onChangeLocal: (v: string) => void;
+  inputStyle: object; labelStyle: object;
+}) {
+  return (
+    <View>
+      <Text style={labelStyle}>Teléfono</Text>
+      <View style={{ flexDirection: 'row', gap: 6 }}>
+        <View style={{ width: 52 }}>
+          <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, textAlign: 'center' }}>Cód. País</Text>
+          <TextInput
+            style={[inputStyle, { textAlign: 'center' }]}
+            value={codPais}
+            onChangeText={onChangePais}
+            keyboardType="number-pad"
+            maxLength={4}
+          />
+        </View>
+        <View style={{ width: 60 }}>
+          <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, textAlign: 'center' }}>Cód. Ciudad</Text>
+          <TextInput
+            style={[inputStyle, { textAlign: 'center' }]}
+            value={codCiud}
+            onChangeText={onChangeCiud}
+            keyboardType="number-pad"
+            maxLength={5}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3 }}>Número</Text>
+          <TextInput
+            style={inputStyle}
+            value={local}
+            onChangeText={onChangeLocal}
+            keyboardType="number-pad"
+            placeholder="4123456"
+            placeholderTextColor="#94a3b8"
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function EnviarModal({ client, onClose }: { client: Client; onClose: () => void }) {
-  const { transactions } = useAppStore();
+  const { transactions, updateClient } = useAppStore();
   const saldo    = client.saldo ?? 0;
   const esAFavor = saldo < 0;
   const alDia    = saldo === 0;
@@ -269,10 +340,16 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
     ? `Hola ${client.nombre}, le informamos que su cuenta está al día. ¡Muchas gracias!`
     : `Hola ${client.nombre}, le recordamos que tiene un saldo ${esAFavor ? `a favor de ${formatARS(Math.abs(saldo))}` : `pendiente de pago de ${formatARS(saldo)}`}. Por favor, para evitar acumulación pase por la agencia para regularizarlo.`;
 
-  const [nombre, setNombre]   = useState(client.nombre);
-  const [mensaje, setMensaje] = useState(defaultMensaje);
+  const telInicial = parseTelefono(client.telefono ?? '');
+  const [nombre, setNombre]     = useState(client.nombre);
+  const [mensaje, setMensaje]   = useState(defaultMensaje);
+  const [codPais, setCodPais]   = useState(telInicial.codPais);
+  const [codCiud, setCodCiud]   = useState(telInicial.codCiud);
+  const [localTel, setLocalTel] = useState(telInicial.local);
 
-  const handleEnviar = () => {
+  const numeroWA = combinaTel(codPais, codCiud, localTel);
+
+  const handleEnviar = async () => {
     const movimientosTexto = ultimos10.map((t) => {
       const partes = [];
       if (t.debe    > 0) partes.push(`Debe: ${formatARS(t.debe)}`);
@@ -290,11 +367,26 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
       mensaje,
     ].filter(Boolean).join('\n');
 
-    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    const url = numeroWA
+      ? `https://wa.me/${numeroWA}?text=${encodeURIComponent(texto)}`
+      : `https://wa.me/?text=${encodeURIComponent(texto)}`;
+
     if (Platform.OS === 'web') {
       window.open(url, '_blank');
     } else {
       Linking.openURL(url);
+    }
+
+    // Si el cliente no tenía teléfono y se ingresó uno, ofrecer guardarlo
+    if (!client.telefono && numeroWA) {
+      const guardar = await confirmar(`¿Guardar este número como teléfono de ${client.nombre}?`);
+      if (guardar) {
+        await updateClient(client.id, {
+          nombre:   client.nombre,
+          telefono: numeroWA,
+          notas:    client.notas ?? '',
+        });
+      }
     }
   };
 
@@ -351,6 +443,24 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
                 <TextInput style={inputStyle} value={nombre} onChangeText={setNombre} />
               </View>
 
+              {/* Teléfono */}
+              <TelInput
+                codPais={codPais} codCiud={codCiud} local={localTel}
+                onChangePais={setCodPais} onChangeCiud={setCodCiud} onChangeLocal={setLocalTel}
+                inputStyle={inputStyle}
+                labelStyle={{ fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 }}
+              />
+              {!!numeroWA && (
+                <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: -8 }}>
+                  Se enviará a: {numeroWA}
+                </Text>
+              )}
+              {!numeroWA && (
+                <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: -8 }}>
+                  Sin número: se abre WhatsApp para elegir contacto
+                </Text>
+              )}
+
               {/* Mensaje */}
               <View>
                 <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Mensaje</Text>
@@ -368,7 +478,7 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
                 onPress={handleEnviar}
                 style={{ backgroundColor: '#25d366', borderRadius: 10, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
               >
-                <Text style={{ fontSize: 18 }}>💬</Text>
+                <FontAwesome5 name="whatsapp" size={18} color="#fff" />
                 <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Enviar por WhatsApp</Text>
               </TouchableOpacity>
 
@@ -384,15 +494,18 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
 
 function EditarClienteModal({ client, onClose }: { client: Client; onClose: () => void }) {
   const { updateClient } = useAppStore();
+  const telInicial = parseTelefono(client.telefono ?? '');
   const [nombre, setNombre]     = useState(client.nombre);
-  const [telefono, setTelefono] = useState(client.telefono ?? '');
+  const [codPais, setCodPais]   = useState(telInicial.codPais);
+  const [codCiud, setCodCiud]   = useState(telInicial.codCiud);
+  const [localTel, setLocalTel] = useState(telInicial.local);
   const [notas, setNotas]       = useState(client.notas ?? '');
   const [loading, setLoading]   = useState(false);
 
   const handleGuardar = async () => {
     if (!nombre.trim()) { Alert.alert('Requerido', 'El nombre es obligatorio'); return; }
     setLoading(true);
-    const err = await updateClient(client.id, { nombre, telefono, notas });
+    const err = await updateClient(client.id, { nombre, telefono: combinaTel(codPais, codCiud, localTel), notas });
     setLoading(false);
     if (err) { Alert.alert('Error', err); return; }
     onClose();
@@ -423,11 +536,11 @@ function EditarClienteModal({ client, onClose }: { client: Client; onClose: () =
                   placeholderTextColor="#94a3b8" value={nombre} onChangeText={setNombre}
                   autoCapitalize="words" />
               </View>
-              <View>
-                <Text style={labelStyle}>Teléfono</Text>
-                <TextInput style={inputStyle} placeholder="Ej: 11 1234-5678"
-                  placeholderTextColor="#94a3b8" value={telefono} onChangeText={setTelefono} />
-              </View>
+              <TelInput
+                codPais={codPais} codCiud={codCiud} local={localTel}
+                onChangePais={setCodPais} onChangeCiud={setCodCiud} onChangeLocal={setLocalTel}
+                inputStyle={inputStyle} labelStyle={labelStyle}
+              />
               <View>
                 <Text style={labelStyle}>Notas</Text>
                 <TextInput style={[inputStyle, { minHeight: 60 }]}

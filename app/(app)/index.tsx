@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useAppStore } from '../../lib/store';
 import type { Client } from '../../types';
 import { formatARS } from '../../lib/format';
-import { ClienteDetalle } from '../../components/FichaCliente';
+import { ClienteDetalle, TelInput, parseTelefono, combinaTel } from '../../components/FichaCliente';
 
 // ─── Sub-componentes ─────────────────────────────────────────
 
@@ -333,16 +333,18 @@ function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => 
 function NuevoClienteModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { createClient } = useAppStore();
   const [nombre, setNombre]     = useState('');
-  const [telefono, setTelefono] = useState('');
+  const [codPais, setCodPais]   = useState('54');
+  const [codCiud, setCodCiud]   = useState('345');
+  const [localTel, setLocalTel] = useState('');
   const [notas, setNotas]       = useState('');
   const [loading, setLoading]   = useState(false);
 
-  const reset = () => { setNombre(''); setTelefono(''); setNotas(''); };
+  const reset = () => { setNombre(''); setCodPais('54'); setCodCiud('345'); setLocalTel(''); setNotas(''); };
 
   const handleGuardar = async () => {
     if (!nombre.trim()) { Alert.alert('Requerido', 'El nombre es obligatorio'); return; }
     setLoading(true);
-    const err = await createClient({ nombre, telefono, notas });
+    const err = await createClient({ nombre, telefono: combinaTel(codPais, codCiud, localTel), notas });
     setLoading(false);
     if (err) { Alert.alert('Error', err); return; }
     reset();
@@ -376,11 +378,11 @@ function NuevoClienteModal({ visible, onClose }: { visible: boolean; onClose: ()
                 placeholderTextColor="#94a3b8" value={nombre} onChangeText={setNombre}
                 autoCapitalize="words" autoFocus />
             </View>
-            <View>
-              <Text style={labelStyle}>Teléfono</Text>
-              <TextInput style={inputStyle} placeholder="Ej: 11 1234-5678"
-                placeholderTextColor="#94a3b8" value={telefono} onChangeText={setTelefono} />
-            </View>
+            <TelInput
+              codPais={codPais} codCiud={codCiud} local={localTel}
+              onChangePais={setCodPais} onChangeCiud={setCodCiud} onChangeLocal={setLocalTel}
+              inputStyle={inputStyle} labelStyle={labelStyle}
+            />
             <View>
               <Text style={labelStyle}>Notas</Text>
               <TextInput style={[inputStyle, { minHeight: 60 }]}
