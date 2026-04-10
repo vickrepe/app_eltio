@@ -334,11 +334,13 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
   const alDia    = saldo === 0;
   const saldoLabel = alDia ? 'Al día' : esAFavor ? 'A favor' : 'Pendiente de pago';
   const saldoColor = alDia ? '#64748b' : esAFavor ? '#2563eb' : '#ef4444';
-  const ultimos10  = transactions.slice(0, 10);
+  const ultimos5   = transactions.slice(0, 5);
 
   const defaultMensaje = alDia
     ? `Hola ${client.nombre}, le informamos que su cuenta está al día. ¡Muchas gracias!`
-    : `Hola ${client.nombre}, le recordamos que tiene un saldo ${esAFavor ? `a favor de ${formatARS(Math.abs(saldo))}` : `pendiente de pago de ${formatARS(saldo)}`}. Por favor, para evitar acumulación pase por la agencia para regularizarlo.`;
+    : esAFavor
+    ? `Hola ${client.nombre}, le informamos que tiene un saldo a favor de ${formatARS(Math.abs(saldo))}.`
+    : `Hola ${client.nombre}, le recordamos que tiene un saldo pendiente de pago de ${formatARS(saldo)}. Estos son sus últimos movimientos:`;
 
   const telInicial = parseTelefono(client.telefono ?? '');
   const [nombre, setNombre]     = useState(client.nombre);
@@ -350,7 +352,7 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
   const numeroWA = combinaTel(codPais, codCiud, localTel);
 
   const handleEnviar = async () => {
-    const movimientosTexto = ultimos10.map((t) => {
+    const movimientosTexto = ultimos5.map((t) => {
       const partes = [];
       if (t.debe    > 0) partes.push(`Debe: ${formatARS(t.debe)}`);
       if (t.entrega > 0) partes.push(`Entrega: ${formatARS(t.entrega)}`);
@@ -359,12 +361,8 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
     }).join('\n');
 
     const texto = [
-      `*${client.nombre}*`,
-      `${saldoLabel}: ${formatARS(Math.abs(saldo))}`,
-      '',
-      ultimos10.length > 0 ? `_Últimos movimientos:_\n${movimientosTexto}` : '',
-      '',
       mensaje,
+      ultimos5.length > 0 && !alDia ? movimientosTexto : '',
     ].filter(Boolean).join('\n');
 
     const url = numeroWA
@@ -420,13 +418,13 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
                   {saldoLabel}: {formatARS(Math.abs(saldo))}
                 </Text>
 
-                {/* Últimos 10 movimientos */}
-                {ultimos10.length > 0 && (
+                {/* Últimos 5 movimientos */}
+                {ultimos5.length > 0 && (
                   <View style={{ borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 10 }}>
                     <Text style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
                       Últimos movimientos
                     </Text>
-                    {ultimos10.map((t) => (
+                    {ultimos5.map((t) => (
                       <View key={t.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
                         <Text style={{ fontSize: 12, color: '#64748b', width: 70 }}>{formatFecha(t.fecha)}</Text>
                         {t.debe > 0    && <Text style={{ fontSize: 12, color: '#ef4444', fontWeight: '600' }}>Debe: {formatARS(t.debe)}</Text>}

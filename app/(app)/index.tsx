@@ -8,7 +8,7 @@ import { useRouter } from 'expo-router';
 import { useAppStore } from '../../lib/store';
 import type { Client } from '../../types';
 import { formatARS } from '../../lib/format';
-import { ClienteDetalle, TelInput, parseTelefono, combinaTel } from '../../components/FichaCliente';
+import { ClienteDetalle, TelInput, parseTelefono, combinaTel, confirmar } from '../../components/FichaCliente';
 
 // ─── Sub-componentes ─────────────────────────────────────────
 
@@ -226,10 +226,11 @@ export default function ClientesScreen() {
 // ─── Modal archivados ────────────────────────────────────────
 
 function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { archivedClients, loadArchivedClients, desarchivarCliente, loadTransactions } = useAppStore();
+  const { archivedClients, loadArchivedClients, desarchivarCliente, eliminarCliente, loadTransactions } = useAppStore();
   const [loading, setLoading]             = useState(false);
   const [detalle, setDetalle]             = useState<Client | null>(null);
   const [loadingId, setLoadingId]         = useState<string | null>(null);
+  const [deletingId, setDeletingId]       = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) loadArchivedClients();
@@ -246,6 +247,16 @@ function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => 
     await loadTransactions(c.id);
     setLoading(false);
     setDetalle(c);
+  };
+
+  const handleEliminar = async (c: Client) => {
+    const ok = await confirmar(
+      `¿Seguro que desea eliminar a ${c.nombre}?\n\nTen en cuenta que al eliminarlo ya no se podrá consultar sus movimientos.`
+    );
+    if (!ok) return;
+    setDeletingId(c.id);
+    await eliminarCliente(c.id);
+    setDeletingId(null);
   };
 
   return (
@@ -299,7 +310,7 @@ function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => 
                         {saldo === 0 ? 'Al día' : formatARS(saldo)}
                       </Text>
                     </View>
-                    {busy ? (
+                    {busy || deletingId === item.id ? (
                       <ActivityIndicator color="#2563eb" size="small" />
                     ) : (
                       <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -314,6 +325,12 @@ function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => 
                           style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#dcfce7' }}
                         >
                           <Text style={{ fontSize: 12, color: '#16a34a', fontWeight: '500' }}>Desarchivar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleEliminar(item)}
+                          style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#fee2e2' }}
+                        >
+                          <Text style={{ fontSize: 13 }}>🗑</Text>
                         </TouchableOpacity>
                       </View>
                     )}

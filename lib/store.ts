@@ -48,6 +48,7 @@ interface AppState {
   // Acciones de clientes
   archivarCliente: (clientId: string) => Promise<string | null>;
   desarchivarCliente: (clientId: string) => Promise<string | null>;
+  eliminarCliente: (clientId: string) => Promise<string | null>;
   loadArchivedClients: () => Promise<void>;
   updateClient: (clientId: string, data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
 
@@ -259,6 +260,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (error) return error.message;
     await Promise.all([get().loadClients(), get().loadArchivedClients()]);
+    return null;
+  },
+
+  eliminarCliente: async (clientId) => {
+    // Las transacciones se eliminan por CASCADE en la FK, pero por si acaso las borramos primero
+    await supabase.from('transactions').delete().eq('client_id', clientId);
+    const { error } = await supabase.from('clients').delete().eq('id', clientId);
+    if (error) return error.message;
+    await get().loadArchivedClients();
     return null;
   },
 
