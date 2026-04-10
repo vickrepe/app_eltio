@@ -230,10 +230,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   inviteUser: async ({ email, nombre, rol }) => {
-    const { error } = await supabase.functions.invoke('invite-user', {
+    const { data, error } = await supabase.functions.invoke('invite-user', {
       body: { email, nombre, rol },
     });
-    if (error) return error.message;
+    if (error) {
+      try {
+        const body = await (error as any).context?.json?.();
+        if (body?.error) return body.error;
+      } catch {}
+      return error.message;
+    }
+    if (data?.error) return data.error;
     return null;
   },
 
