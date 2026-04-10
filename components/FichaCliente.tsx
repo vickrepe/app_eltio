@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal,
   ActivityIndicator, Platform, Alert, KeyboardAvoidingView,
-  TextInput, useWindowDimensions,
+  TextInput, useWindowDimensions, Linking,
 } from 'react-native';
 import { useAppStore } from '../lib/store';
 import type { Client, Transaction, TransactionWithSaldo } from '../types';
@@ -253,6 +253,132 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
   );
 }
 
+// ─── EnviarModal ─────────────────────────────────────────────
+
+function EnviarModal({ client, onClose }: { client: Client; onClose: () => void }) {
+  const { transactions } = useAppStore();
+  const saldo    = client.saldo ?? 0;
+  const esAFavor = saldo < 0;
+  const alDia    = saldo === 0;
+  const saldoLabel = alDia ? 'Al día' : esAFavor ? 'A favor' : 'Pendiente de pago';
+  const saldoColor = alDia ? '#64748b' : esAFavor ? '#2563eb' : '#ef4444';
+  const ultimos10  = transactions.slice(0, 10);
+
+  const defaultMensaje = alDia
+    ? `Hola ${client.nombre}, le informamos que su cuenta está al día. ¡Muchas gracias!`
+    : `Hola ${client.nombre}, le recordamos que tiene un saldo ${esAFavor ? `a favor de ${formatARS(Math.abs(saldo))}` : `pendiente de pago de ${formatARS(saldo)}`}. Por favor, para evitar acumulación pase por la agencia para regularizarlo.`;
+
+  const [nombre, setNombre]   = useState(client.nombre);
+  const [mensaje, setMensaje] = useState(defaultMensaje);
+
+  const handleEnviar = () => {
+    const movimientosTexto = ultimos10.map((t) => {
+      const partes = [];
+      if (t.debe    > 0) partes.push(`Debe: ${formatARS(t.debe)}`);
+      if (t.entrega > 0) partes.push(`Entrega: ${formatARS(t.entrega)}`);
+      if (t.observaciones) partes.push(t.observaciones);
+      return `${formatFecha(t.fecha)} | ${partes.join(' | ')}`;
+    }).join('\n');
+
+    const texto = [
+      `*${client.nombre}*`,
+      `${saldoLabel}: ${formatARS(Math.abs(saldo))}`,
+      '',
+      ultimos10.length > 0 ? `_Últimos movimientos:_\n${movimientosTexto}` : '',
+      '',
+      mensaje,
+    ].filter(Boolean).join('\n');
+
+    const url = `https://wa.me/?text=${encodeURIComponent(texto)}`;
+    if (Platform.OS === 'web') {
+      window.open(url, '_blank');
+    } else {
+      Linking.openURL(url);
+    }
+  };
+
+  const inputStyle = {
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: '#1e293b',
+  };
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%', maxWidth: 480 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' }}>
+
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1e293b' }}>Enviar resumen</Text>
+              <TouchableOpacity onPress={onClose}>
+                <Text style={{ fontSize: 20, color: '#94a3b8' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ padding: 18, gap: 16 }}>
+
+              {/* Preview card */}
+              <View style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                {/* Nombre y saldo */}
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#1e293b', marginBottom: 4 }}>{client.nombre}</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: saldoColor, marginBottom: 12 }}>
+                  {saldoLabel}: {formatARS(Math.abs(saldo))}
+                </Text>
+
+                {/* Últimos 10 movimientos */}
+                {ultimos10.length > 0 && (
+                  <View style={{ borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 10 }}>
+                    <Text style={{ fontSize: 10, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
+                      Últimos movimientos
+                    </Text>
+                    {ultimos10.map((t) => (
+                      <View key={t.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+                        <Text style={{ fontSize: 12, color: '#64748b', width: 70 }}>{formatFecha(t.fecha)}</Text>
+                        {t.debe > 0    && <Text style={{ fontSize: 12, color: '#ef4444', fontWeight: '600' }}>Debe: {formatARS(t.debe)}</Text>}
+                        {t.entrega > 0 && <Text style={{ fontSize: 12, color: '#22c55e', fontWeight: '600' }}>Entrega: {formatARS(t.entrega)}</Text>}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Nombre destinatario */}
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Nombre en el mensaje</Text>
+                <TextInput style={inputStyle} value={nombre} onChangeText={setNombre} />
+              </View>
+
+              {/* Mensaje */}
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Mensaje</Text>
+                <TextInput
+                  style={[inputStyle, { minHeight: 90 }]}
+                  value={mensaje}
+                  onChangeText={setMensaje}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {/* Botón WhatsApp */}
+              <TouchableOpacity
+                onPress={handleEnviar}
+                style={{ backgroundColor: '#25d366', borderRadius: 10, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+              >
+                <Text style={{ fontSize: 18 }}>💬</Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Enviar por WhatsApp</Text>
+              </TouchableOpacity>
+
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── EditarClienteModal ──────────────────────────────────────
 
 function EditarClienteModal({ client, onClose }: { client: Client; onClose: () => void }) {
@@ -337,8 +463,10 @@ export function ClienteDetalle({ client }: { client: Client }) {
   const isNarrow = screenWidth < 768;
   const [showForm, setShowForm]           = useState(false);
   const [showEditar, setShowEditar]       = useState(false);
+  const [showEnviar, setShowEnviar]       = useState(false);
   const [hoverArchivar, setHoverArchivar] = useState(false);
   const [hoverEditar, setHoverEditar]     = useState(false);
+  const [hoverEnviar, setHoverEnviar]     = useState(false);
 
   const saldo    = client.saldo ?? 0;
   const esAFavor = saldo < 0;
@@ -360,6 +488,11 @@ export function ClienteDetalle({ client }: { client: Client }) {
       {/* Modal editar */}
       {showEditar && (
         <EditarClienteModal client={client} onClose={() => setShowEditar(false)} />
+      )}
+
+      {/* Modal enviar */}
+      {showEnviar && (
+        <EnviarModal client={client} onClose={() => setShowEnviar(false)} />
       )}
 
       {/* Header */}
@@ -390,6 +523,21 @@ export function ClienteDetalle({ client }: { client: Client }) {
                   }}
                 >
                   <Text style={{ fontSize: 14 }}>✏️</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShowEnviar(true)}
+                  // @ts-ignore
+                  onMouseEnter={() => setHoverEnviar(true)}
+                  onMouseLeave={() => setHoverEnviar(false)}
+                  style={{
+                    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+                    backgroundColor: hoverEnviar ? '#dcfce7' : '#e2e8f0',
+                  }}
+                >
+                  <Text style={{ color: hoverEnviar ? '#16a34a' : '#94a3b8', fontWeight: '500', fontSize: 12 }}>
+                    Enviar
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
