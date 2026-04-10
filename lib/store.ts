@@ -49,7 +49,11 @@ interface AppState {
   updateClient: (clientId: string, data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
 
   // Usuarios
+  orgUsers: Profile[];
+  loadOrgUsers: () => Promise<void>;
   inviteUser: (data: { email: string; nombre: string; rol: string }) => Promise<string | null>;
+  updateUserRol: (profileId: string, rol: string) => Promise<string | null>;
+  removeUser: (profileId: string) => Promise<string | null>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -64,6 +68,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   cajaClient:       null,
   transactions:        [],
   transactionsLoading: false,
+  orgUsers:         [],
 
   setSession: (session) => {
     set({ session, user: session?.user ?? null, authLoading: false });
@@ -229,6 +234,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     return null;
   },
 
+  loadOrgUsers: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('org_id', organization.id)
+      .order('nombre');
+    if (data) set({ orgUsers: data as Profile[] });
+  },
+
   inviteUser: async ({ email, nombre, rol }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return 'Sin sesión activa';
@@ -246,6 +262,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const body = await res.json();
     if (!res.ok) return body.error ?? `Error ${res.status}`;
+    return null;
+  },
+
+  updateUserRol: async (profileId, rol) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ rol })
+      .eq('id', profileId);
+    if (error) return error.message;
+    await get().loadOrgUsers();
+    return null;
+  },
+
+  removeUser: async (profileId) => {
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', profileId);
+    if (error) return error.message;
+    await get().loadOrgUsers();
     return null;
   },
 
