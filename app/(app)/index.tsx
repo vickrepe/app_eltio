@@ -61,6 +61,7 @@ export default function ClientesScreen() {
   const isWeb      = Platform.OS === 'web';
   const [search, setSearch] = useState('');
   const [showNuevoCliente, setShowNuevoCliente] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [mobileDetalle, setMobileDetalle] = useState(false);
 
   useEffect(() => {
@@ -150,11 +151,19 @@ export default function ClientesScreen() {
       <TouchableOpacity
         onPress={() => isWeb ? setShowNuevoCliente(true) : router.push('/cliente/nuevo')}
         style={{
-          margin: 12, backgroundColor: '#2563eb', borderRadius: 10,
+          marginHorizontal: 12, marginTop: 12, backgroundColor: '#2563eb', borderRadius: 10,
           paddingVertical: 12, alignItems: 'center',
         }}
       >
         <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>+ Nuevo cliente</Text>
+      </TouchableOpacity>
+
+      {/* Ver archivados */}
+      <TouchableOpacity
+        onPress={() => setShowArchived(true)}
+        style={{ marginHorizontal: 12, marginTop: 8, marginBottom: 12, paddingVertical: 10, alignItems: 'center' }}
+      >
+        <Text style={{ color: '#94a3b8', fontSize: 13 }}>📦 Ver archivados</Text>
       </TouchableOpacity>
     </View>
   );
@@ -204,7 +213,118 @@ export default function ClientesScreen() {
           onClose={() => setShowNuevoCliente(false)}
         />
       )}
+
+      {/* Modal archivados */}
+      <ArchivedModal
+        visible={showArchived}
+        onClose={() => setShowArchived(false)}
+      />
     </View>
+  );
+}
+
+// ─── Modal archivados ────────────────────────────────────────
+
+function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { archivedClients, loadArchivedClients, desarchivarCliente, loadTransactions } = useAppStore();
+  const [loading, setLoading]             = useState(false);
+  const [detalle, setDetalle]             = useState<Client | null>(null);
+  const [loadingId, setLoadingId]         = useState<string | null>(null);
+
+  useEffect(() => {
+    if (visible) loadArchivedClients();
+  }, [visible]);
+
+  const handleDesarchivar = async (c: Client) => {
+    setLoadingId(c.id);
+    await desarchivarCliente(c.id);
+    setLoadingId(null);
+  };
+
+  const handleVerHistorial = async (c: Client) => {
+    setLoading(true);
+    await loadTransactions(c.id);
+    setLoading(false);
+    setDetalle(c);
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, maxHeight: '85%' as any, overflow: 'hidden' }}>
+
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
+            {detalle && (
+              <TouchableOpacity onPress={() => setDetalle(null)} style={{ marginRight: 12 }}>
+                <Text style={{ fontSize: 18, color: '#2563eb' }}>←</Text>
+              </TouchableOpacity>
+            )}
+            <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: '#1e293b' }}>
+              {detalle ? detalle.nombre : 'Clientes archivados'}
+            </Text>
+            <TouchableOpacity onPress={() => { setDetalle(null); onClose(); }}>
+              <Text style={{ fontSize: 20, color: '#94a3b8' }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Contenido */}
+          {detalle ? (
+            <ClienteDetalle client={detalle} />
+          ) : loading ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <ActivityIndicator color="#2563eb" />
+            </View>
+          ) : archivedClients.length === 0 ? (
+            <View style={{ padding: 40, alignItems: 'center' }}>
+              <Text style={{ fontSize: 28, marginBottom: 8 }}>📭</Text>
+              <Text style={{ color: '#94a3b8', fontSize: 14 }}>No hay clientes archivados</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={archivedClients}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => {
+                const saldo = item.saldo ?? 0;
+                const busy  = loadingId === item.id;
+                return (
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingHorizontal: 20, paddingVertical: 14,
+                    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+                  }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: '#1e293b' }}>{item.nombre}</Text>
+                      <Text style={{ fontSize: 12, color: saldo > 0 ? '#ef4444' : saldo < 0 ? '#2563eb' : '#94a3b8', marginTop: 2 }}>
+                        {saldo === 0 ? 'Al día' : formatARS(saldo)}
+                      </Text>
+                    </View>
+                    {busy ? (
+                      <ActivityIndicator color="#2563eb" size="small" />
+                    ) : (
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => handleVerHistorial(item)}
+                          style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#f1f5f9' }}
+                        >
+                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '500' }}>Ver historial</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleDesarchivar(item)}
+                          style={{ paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#dcfce7' }}
+                        >
+                          <Text style={{ fontSize: 12, color: '#16a34a', fontWeight: '500' }}>Desarchivar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
   );
 }
 

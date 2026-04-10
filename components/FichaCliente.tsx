@@ -377,7 +377,7 @@ export function ClienteDetalle({ client }: { client: Client }) {
           </View>
 
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            {!client.es_caja && (
+            {!client.es_caja && client.activo && (
               <>
                 <TouchableOpacity
                   onPress={() => setShowEditar(true)}
@@ -426,7 +426,7 @@ export function ClienteDetalle({ client }: { client: Client }) {
         <View style={{ flexDirection: 'row', marginTop: 16, marginHorizontal: -4 }}>
           <KPI
             label="Saldo actual"
-            value={alDia ? 'Al día' : (esAFavor ? 'A favor ' : '') + formatARS(saldo)}
+            value={alDia ? 'Al día' : formatARS(saldo)}
             color={alDia ? '#64748b' : esAFavor ? '#2563eb' : '#ef4444'}
           />
           <KPI label="Último debe"

@@ -12,10 +12,11 @@ interface AppState {
   authLoading:  boolean;
 
   // Clientes
-  clients:        Client[];
-  clientsLoading: boolean;
+  clients:          Client[];
+  clientsLoading:   boolean;
   selectedClientId: string | null;
-  cajaClient: Client | null;
+  cajaClient:       Client | null;
+  archivedClients:  Client[];
 
   // Transacciones del cliente seleccionado
   transactions:        Transaction[];
@@ -46,6 +47,8 @@ interface AppState {
 
   // Acciones de clientes
   archivarCliente: (clientId: string) => Promise<string | null>;
+  desarchivarCliente: (clientId: string) => Promise<string | null>;
+  loadArchivedClients: () => Promise<void>;
   updateClient: (clientId: string, data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
 
   // Usuarios
@@ -66,6 +69,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clientsLoading:   false,
   selectedClientId: null,
   cajaClient:       null,
+  archivedClients:  [],
   transactions:        [],
   transactionsLoading: false,
   orgUsers:         [],
@@ -222,6 +226,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     return null;
   },
 
+  loadArchivedClients: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('clients_with_balance')
+      .select('*')
+      .eq('org_id', organization.id)
+      .eq('activo', false)
+      .eq('es_caja', false)
+      .order('nombre');
+    if (data) set({ archivedClients: data as Client[] });
+  },
+
   archivarCliente: async (clientId) => {
     const { error } = await supabase
       .from('clients')
@@ -231,6 +248,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (error) return error.message;
     await get().loadClients();
     set({ selectedClientId: null, transactions: [] });
+    return null;
+  },
+
+  desarchivarCliente: async (clientId) => {
+    const { error } = await supabase
+      .from('clients')
+      .update({ activo: true })
+      .eq('id', clientId);
+
+    if (error) return error.message;
+    await Promise.all([get().loadClients(), get().loadArchivedClients()]);
     return null;
   },
 
