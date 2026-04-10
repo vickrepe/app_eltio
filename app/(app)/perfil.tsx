@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useAppStore } from '../../lib/store';
+import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../types';
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -264,6 +265,92 @@ function InvitarUsuario() {
   );
 }
 
+// ─── Cambiar contraseña ──────────────────────────────────────
+
+function CambiarContrasena() {
+  const [expanded, setExpanded]   = useState(false);
+  const [password, setPassword]   = useState('');
+  const [confirm, setConfirm]     = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleGuardar = async () => {
+    setErrorMsg(null); setSuccessMsg(null);
+    if (password.length < 6) { setErrorMsg('Mínimo 6 caracteres'); return; }
+    if (password !== confirm) { setErrorMsg('Las contraseñas no coinciden'); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (error) { setErrorMsg(error.message); return; }
+    setSuccessMsg('Contraseña actualizada correctamente');
+    setPassword(''); setConfirm('');
+  };
+
+  const inputStyle = {
+    backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: '#1e293b',
+  };
+  const labelStyle = { fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 };
+
+  return (
+    <View style={cardStyle}>
+      <TouchableOpacity
+        onPress={() => setExpanded(!expanded)}
+        activeOpacity={0.8}
+        style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }}
+      >
+        <Text style={{ fontSize: 18, marginRight: 12 }}>🔑</Text>
+        <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#1e293b' }}>
+          Cambiar contraseña
+        </Text>
+        <Text style={{ color: '#94a3b8', fontSize: 16 }}>{expanded ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={{ paddingHorizontal: 18, paddingBottom: 18, gap: 12 }}>
+          <View style={{ height: 1, backgroundColor: '#f1f5f9', marginBottom: 4 }} />
+
+          <View>
+            <Text style={labelStyle}>Nueva contraseña</Text>
+            <TextInput style={inputStyle} placeholder="Mínimo 6 caracteres"
+              placeholderTextColor="#94a3b8" value={password} onChangeText={setPassword}
+              secureTextEntry />
+          </View>
+          <View>
+            <Text style={labelStyle}>Confirmar contraseña</Text>
+            <TextInput style={inputStyle} placeholder="Repetí la contraseña"
+              placeholderTextColor="#94a3b8" value={confirm} onChangeText={setConfirm}
+              secureTextEntry />
+          </View>
+
+          {errorMsg && (
+            <View style={{ backgroundColor: '#fee2e2', borderRadius: 8, padding: 10 }}>
+              <Text style={{ color: '#dc2626', fontSize: 13 }}>{errorMsg}</Text>
+            </View>
+          )}
+          {successMsg && (
+            <View style={{ backgroundColor: '#dcfce7', borderRadius: 8, padding: 10 }}>
+              <Text style={{ color: '#16a34a', fontSize: 13 }}>{successMsg}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity onPress={handleGuardar} disabled={loading} style={{
+            backgroundColor: '#2563eb', borderRadius: 9,
+            paddingVertical: 12, alignItems: 'center', marginTop: 4,
+          }}>
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Guardar contraseña</Text>
+            }
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Pantalla principal ──────────────────────────────────────
 
 export default function PerfilScreen() {
@@ -321,6 +408,9 @@ export default function PerfilScreen() {
           <InvitarUsuario />
         </>
       )}
+
+      {/* Todos los usuarios */}
+      <CambiarContrasena />
 
       {/* Cerrar sesión */}
       <TouchableOpacity
