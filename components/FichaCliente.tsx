@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Platform, Alert, KeyboardAvoidingView,
   TextInput, useWindowDimensions, Linking,
 } from 'react-native';
+import { FontAwesome5 } from '@expo/vector-icons';
 import { useAppStore } from '../lib/store';
 import type { Client, Transaction, TransactionWithSaldo } from '../types';
 import { formatARS, formatFecha, formatHora, todayISO } from '../lib/format';
@@ -535,9 +536,7 @@ export function ClienteDetalle({ client }: { client: Client }) {
                     backgroundColor: hoverEnviar ? '#dcfce7' : '#e2e8f0',
                   }}
                 >
-                  <Text style={{ color: hoverEnviar ? '#16a34a' : '#94a3b8', fontWeight: '500', fontSize: 12 }}>
-                    Enviar
-                  </Text>
+                  <FontAwesome5 name="whatsapp" size={16} color={hoverEnviar ? '#16a34a' : '#94a3b8'} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
