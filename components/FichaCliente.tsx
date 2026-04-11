@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Platform, Alert, KeyboardAvoidingView,
   TextInput, useWindowDimensions, Linking,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAppStore } from '../lib/store';
 import type { Client, Transaction, TransactionWithSaldo } from '../types';
@@ -120,6 +121,90 @@ function KPI({ label, value, color, bold }: { label: string; value: string; colo
 
 const TIPOS_FIJOS = ['Ventas', 'Empleados', 'Gastos Casa', 'Proveedores'];
 
+// ─── DateField ───────────────────────────────────────────────
+
+function DateField({
+  value, onChange, label, inputStyle, labelStyle,
+}: {
+  value: string;          // ISO: YYYY-MM-DD
+  onChange: (iso: string) => void;
+  label: string;
+  inputStyle: object;
+  labelStyle: object;
+}) {
+  const [show, setShow] = useState(false);
+  const date = new Date(value + 'T12:00:00');
+
+  if (Platform.OS === 'web') {
+    return (
+      <View>
+        <Text style={labelStyle}>{label}</Text>
+        {/* @ts-ignore */}
+        <input
+          type="date"
+          value={value}
+          onChange={(e: any) => onChange(e.target.value)}
+          style={{
+            backgroundColor: '#f8fafc', border: '1px solid #e2e8f0',
+            borderRadius: 8, paddingLeft: 12, paddingRight: 12,
+            paddingTop: 8, paddingBottom: 8, fontSize: 15, color: '#1e293b',
+            width: '100%', boxSizing: 'border-box' as any,
+          }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Text style={labelStyle}>{label}</Text>
+      <TouchableOpacity style={inputStyle} onPress={() => setShow(true)} activeOpacity={0.7}>
+        <Text style={{ fontSize: 15, color: '#1e293b' }}>{formatFecha(value)}</Text>
+      </TouchableOpacity>
+      {show && Platform.OS === 'android' && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display="calendar"
+          onChange={(_, selected) => {
+            setShow(false);
+            if (selected) onChange(selected.toISOString().split('T')[0]);
+          }}
+        />
+      )}
+      {show && Platform.OS === 'ios' && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setShow(false)}>
+          <TouchableOpacity
+            style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.3)' }}
+            activeOpacity={1}
+            onPress={() => setShow(false)}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+              <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 32 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', padding: 12 }}>
+                  <TouchableOpacity onPress={() => setShow(false)}>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#2563eb' }}>Listo</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={date}
+                  mode="date"
+                  display="spinner"
+                  locale="es-AR"
+                  onChange={(_, selected) => {
+                    if (selected) onChange(selected.toISOString().split('T')[0]);
+                  }}
+                  style={{ height: 200 }}
+                />
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+      )}
+    </View>
+  );
+}
+
 // ─── MovimientoForm ──────────────────────────────────────────
 
 function MovimientoForm({
@@ -218,11 +303,13 @@ function MovimientoForm({
           </View>
         </View>
 
-        <View>
-          <Text style={labelStyle}>Fecha</Text>
-          <TextInput style={inputStyle} placeholder="2026-04-09" placeholderTextColor="#94a3b8"
-            value={fecha} onChangeText={setFecha} />
-        </View>
+        <DateField
+          label="Fecha"
+          value={fecha}
+          onChange={setFecha}
+          inputStyle={inputStyle}
+          labelStyle={labelStyle}
+        />
 
         {/* Tipo — solo en negocio */}
         {isNegocio && (
@@ -492,14 +579,13 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
                   </View>
                 </View>
                 {/* Fecha */}
-                <View>
-                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Fecha</Text>
-                  <TextInput
-                    style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
-                    placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8"
-                    value={editFecha} onChangeText={setEditFecha}
-                  />
-                </View>
+                <DateField
+                  label="Fecha"
+                  value={editFecha}
+                  onChange={setEditFecha}
+                  inputStyle={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
+                  labelStyle={{ fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 }}
+                />
                 {/* Tipo — solo negocio */}
                 {variant === 'negocio' && (
                   <View>
