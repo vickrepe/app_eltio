@@ -1,3 +1,12 @@
+/** Formatea un saldo con signo: positivo → "+$ X", negativo → "-$ X", cero → "—" */
+export function formatSaldo(n: number): string {
+  if (n === 0) return '—';
+  const abs = Math.abs(n);
+  const entero = Math.floor(abs);
+  const formatted = entero.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (n > 0 ? '+' : '-') + '$ ' + formatted;
+}
+
 /** Formatea un número como pesos argentinos. Compatible con Hermes (Android). */
 export function formatARS(n: number): string {
   const abs = Math.abs(n);

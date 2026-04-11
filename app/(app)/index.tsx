@@ -7,7 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../../lib/store';
 import type { Client } from '../../types';
-import { formatARS } from '../../lib/format';
+import { formatARS, formatSaldo } from '../../lib/format';
 import { ClienteDetalle, TelInput, parseTelefono, combinaTel, confirmar } from '../../components/FichaCliente';
 
 // ─── Sub-componentes ─────────────────────────────────────────
@@ -15,9 +15,8 @@ import { ClienteDetalle, TelInput, parseTelefono, combinaTel, confirmar } from '
 function ClientRow({ client, selected, onPress }: {
   client: Client; selected: boolean; onPress: () => void;
 }) {
-  const saldo = client.saldo ?? 0;
-  const esAFavor = saldo < 0;
-  const alDia    = saldo === 0;
+  const saldo = -(client.saldo ?? 0);
+  const alDia = saldo === 0;
 
   return (
     <TouchableOpacity
@@ -38,10 +37,10 @@ function ClientRow({ client, selected, onPress }: {
       </Text>
       <Text style={{
         fontSize: 13, fontWeight: '600',
-        color: alDia ? '#64748b' : esAFavor ? '#2563eb' : '#ef4444',
+        color: alDia ? '#64748b' : saldo > 0 ? '#16a34a' : '#ef4444',
         marginLeft: 8,
       }}>
-        {alDia ? '—' : (esAFavor ? '+' : '') + formatARS(saldo)}
+        {formatSaldo(saldo)}
       </Text>
     </TouchableOpacity>
   );
@@ -296,7 +295,7 @@ function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => 
               data={archivedClients}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => {
-                const saldo = item.saldo ?? 0;
+                const saldo = -(item.saldo ?? 0);
                 const busy  = loadingId === item.id;
                 return (
                   <View style={{
@@ -306,8 +305,8 @@ function ArchivedModal({ visible, onClose }: { visible: boolean; onClose: () => 
                   }}>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 14, fontWeight: '600', color: '#1e293b' }}>{item.nombre}</Text>
-                      <Text style={{ fontSize: 12, color: saldo > 0 ? '#ef4444' : saldo < 0 ? '#2563eb' : '#94a3b8', marginTop: 2 }}>
-                        {saldo === 0 ? 'Al día' : formatARS(saldo)}
+                      <Text style={{ fontSize: 12, color: saldo > 0 ? '#16a34a' : saldo < 0 ? '#ef4444' : '#94a3b8', marginTop: 2 }}>
+                        {formatSaldo(saldo)}
                       </Text>
                     </View>
                     {busy || deletingId === item.id ? (

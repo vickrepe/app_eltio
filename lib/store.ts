@@ -46,7 +46,10 @@ interface AppState {
     fecha: string;
     tipo?: string;
   }) => Promise<string | null>;
-  cancelarTransaccion: (transactionId: string, clientId: string) => Promise<string | null>;
+  cancelarTransaccion:  (transactionId: string, clientId: string) => Promise<string | null>;
+  updateTransaction:    (transactionId: string, clientId: string, data: {
+    debe: number; entrega: number; observaciones: string; fecha: string; tipo?: string;
+  }) => Promise<string | null>;
 
   // Acciones de clientes
   archivarCliente: (clientId: string) => Promise<string | null>;
@@ -257,6 +260,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     await Promise.all([
       isCaja ? get().loadCaja() : isCajaNego ? get().loadCajaNego() : get().loadClients(),
       get().loadTransactions(client_id),
+    ]);
+    return null;
+  },
+
+  updateTransaction: async (transactionId, clientId, { debe, entrega, observaciones, fecha, tipo }) => {
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        debe,
+        entrega,
+        observaciones: observaciones.trim() || null,
+        fecha,
+        tipo: tipo?.trim() || null,
+      })
+      .eq('id', transactionId);
+    if (error) return error.message;
+    const isCaja     = get().cajaClient?.id === clientId;
+    const isCajaNego = get().cajaNegoClient?.id === clientId;
+    await Promise.all([
+      isCaja ? get().loadCaja() : isCajaNego ? get().loadCajaNego() : get().loadClients(),
+      get().loadTransactions(clientId),
     ]);
     return null;
   },

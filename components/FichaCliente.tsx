@@ -7,7 +7,7 @@ import {
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAppStore } from '../lib/store';
 import type { Client, Transaction, TransactionWithSaldo } from '../types';
-import { formatARS, formatFecha, formatHora, todayISO } from '../lib/format';
+import { formatARS, formatSaldo, formatFecha, formatHora, todayISO } from '../lib/format';
 
 function todayDisplay(): string {
   return formatFecha(todayISO());
@@ -29,7 +29,7 @@ export function calcularSaldos(txs: Transaction[]): TransactionWithSaldo[] {
   const asc = [...txs].reverse();
   let acum = 0;
   return asc.map((tx) => {
-    acum += tx.debe - tx.entrega;
+    acum += tx.entrega - tx.debe;
     return { ...tx, saldo_acumulado: acum };
   }).reverse();
 }
@@ -38,7 +38,7 @@ export const COL = { fecha: 80, debe: 72, entrega: 72, saldo: 72, tipo: 88, tras
 
 // ─── KPI ─────────────────────────────────────────────────────
 
-function KPI({ label, value, color }: { label: string; value: string; color: string }) {
+function KPI({ label, value, color, bold }: { label: string; value: string; color: string; bold?: boolean }) {
   return (
     <View style={{
       flex: 1, backgroundColor: '#f8fafc', borderRadius: 10,
@@ -48,7 +48,7 @@ function KPI({ label, value, color }: { label: string; value: string; color: str
         numberOfLines={1}>
         {label}
       </Text>
-      <Text style={{ fontSize: 15, fontWeight: '700', color, marginTop: 3 }}
+      <Text style={{ fontSize: bold ? 17 : 15, fontWeight: '700', color, marginTop: 3 }}
         numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
         {value}
       </Text>
@@ -101,7 +101,7 @@ function MovimientoForm({
     const debeNum    = parseFloat(debe.replace(',', '.'))    || 0;
     const entregaNum = parseFloat(entrega.replace(',', '.')) || 0;
     if (debeNum <= 0 && entregaNum <= 0) {
-      Alert.alert('Error', 'Ingresá al menos un monto en Debe o Entrega');
+      Alert.alert('Error', 'Ingresá al menos un monto en Salida o Entrada');
       return;
     }
     const tipo = isNegocio
@@ -129,12 +129,12 @@ function MovimientoForm({
       <View style={{ gap: 12 }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <View style={{ flex: 1 }}>
-            <Text style={labelStyle}>Debe ($)</Text>
+            <Text style={labelStyle}>Salida ($)</Text>
             <TextInput style={inputStyle} placeholder="0" placeholderTextColor="#94a3b8"
               value={debe} onChangeText={setDebe} keyboardType="decimal-pad" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={labelStyle}>Entrega ($)</Text>
+            <Text style={labelStyle}>Entrada ($)</Text>
             <TextInput style={inputStyle} placeholder="0" placeholderTextColor="#94a3b8"
               value={entrega} onChangeText={setEntrega} keyboardType="decimal-pad" />
           </View>
@@ -239,10 +239,64 @@ function MovimientoForm({
 // ─── FilaTransaccion ─────────────────────────────────────────
 
 function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; clientId: string; variant?: string }) {
-  const { cancelarTransaccion } = useAppStore();
+  const { cancelarTransaccion, updateTransaction, negocioTipos, loadNegocioTipos } = useAppStore();
   const [hoverTrash, setHoverTrash] = useState(false);
   const [showInfo, setShowInfo]     = useState(false);
+  const [showEdit, setShowEdit]     = useState(false);
   const [loading, setLoading]       = useState(false);
+
+  // Edit form state
+  const [editDebe, setEditDebe]         = useState('');
+  const [editEntrega, setEditEntrega]   = useState('');
+  const [editObs, setEditObs]           = useState('');
+  const [editFecha, setEditFecha]       = useState('');
+  const [editTipo, setEditTipo]         = useState('');
+  const [editCustom, setEditCustom]     = useState('');
+  const [editSaving, setEditSaving]     = useState(false);
+
+  const openEdit = () => {
+    setEditDebe(tx.debe > 0 ? String(tx.debe) : '');
+    setEditEntrega(tx.entrega > 0 ? String(tx.entrega) : '');
+    setEditObs(tx.observaciones ?? '');
+    setEditFecha(tx.fecha);
+    // Determine if tipo is custom
+    const tipoFijo = TIPOS_FIJOS.includes(tx.tipo ?? '');
+    const tipoCustomGuardado = negocioTipos.some(t => t.nombre === tx.tipo);
+    if (!tx.tipo) {
+      setEditTipo('');
+      setEditCustom('');
+    } else if (tipoFijo || tipoCustomGuardado) {
+      setEditTipo(tx.tipo ?? '');
+      setEditCustom('');
+    } else {
+      setEditTipo('Personalizado');
+      setEditCustom(tx.tipo ?? '');
+    }
+    setShowInfo(false);
+    setShowEdit(true);
+  };
+
+  const handleSaveEdit = async () => {
+    const debeNum    = parseFloat(editDebe.replace(',', '.'))    || 0;
+    const entregaNum = parseFloat(editEntrega.replace(',', '.')) || 0;
+    if (debeNum <= 0 && entregaNum <= 0) {
+      Alert.alert('Error', 'Ingresá al menos un monto en Salida o Entrada');
+      return;
+    }
+    const tipoFinal = editTipo === 'Personalizado' ? editCustom.trim() || undefined : editTipo || undefined;
+    setEditSaving(true);
+    const err = await updateTransaction(tx.id, clientId, {
+      debe: debeNum, entrega: entregaNum,
+      observaciones: editObs, fecha: editFecha, tipo: tipoFinal,
+    });
+    setEditSaving(false);
+    if (err) { Alert.alert('Error', err); return; }
+    setShowEdit(false);
+  };
+
+  useEffect(() => {
+    if (variant === 'negocio') loadNegocioTipos();
+  }, []);
 
   const handleEliminar = async () => {
     const ok = await confirmar('¿Eliminar este movimiento? El saldo se actualizará.');
@@ -306,28 +360,152 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
               <Text style={{ fontSize: 12, color: '#94a3b8' }}>Registrado por</Text>
               <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{usuario}</Text>
             </View>
+            {variant === 'negocio' && (
+              <TouchableOpacity
+                onPress={openEdit}
+                style={{
+                  marginTop: 4, paddingVertical: 9, borderRadius: 8,
+                  backgroundColor: '#eff6ff', alignItems: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563eb' }}>Editar movimiento</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal visible={showEdit} transparent animationType="slide" onRequestClose={() => setShowEdit(false)}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+            activeOpacity={1}
+            onPress={() => setShowEdit(false)}
+          >
+            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+              <ScrollView
+                style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18 }}
+                contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 36 }}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 4 }}>
+                  Editar movimiento
+                </Text>
+                {/* Salida / Entrada */}
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Salida ($)</Text>
+                    <TextInput
+                      style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
+                      placeholder="0" placeholderTextColor="#94a3b8"
+                      value={editDebe} onChangeText={setEditDebe} keyboardType="decimal-pad"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Entrada ($)</Text>
+                    <TextInput
+                      style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
+                      placeholder="0" placeholderTextColor="#94a3b8"
+                      value={editEntrega} onChangeText={setEditEntrega} keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+                {/* Fecha */}
+                <View>
+                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Fecha</Text>
+                  <TextInput
+                    style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
+                    placeholder="YYYY-MM-DD" placeholderTextColor="#94a3b8"
+                    value={editFecha} onChangeText={setEditFecha}
+                  />
+                </View>
+                {/* Tipo */}
+                <View>
+                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Tipo</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {[...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado'].map((t) => {
+                      const active = editTipo === t;
+                      return (
+                        <TouchableOpacity
+                          key={t}
+                          onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
+                          style={{
+                            paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                            borderColor: active ? '#dc2626' : '#e2e8f0',
+                            backgroundColor: active ? '#fee2e2' : '#f8fafc',
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>
+                            {t}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {editTipo === 'Personalizado' && (
+                    <TextInput
+                      style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
+                      placeholder="Nombre del tipo de gasto" placeholderTextColor="#94a3b8"
+                      value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
+                    />
+                  )}
+                </View>
+                {/* Observaciones */}
+                <View>
+                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Observaciones</Text>
+                  <TextInput
+                    style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b', minHeight: 60 }}
+                    placeholder="Ej: pagó con tarjeta..." placeholderTextColor="#94a3b8"
+                    value={editObs} onChangeText={setEditObs} multiline textAlignVertical="top"
+                  />
+                </View>
+                {/* Buttons */}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => setShowEdit(false)}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#64748b', fontWeight: '600' }}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleSaveEdit}
+                    disabled={editSaving}
+                    style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: '#2563eb', alignItems: 'center' }}
+                  >
+                    {editSaving
+                      ? <ActivityIndicator color="#fff" />
+                      : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar cambios</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
       <Text style={{
         width: COL.debe, fontSize: fs, textAlign: 'right',
         color: tx.debe > 0 ? '#ef4444' : '#cbd5e1',
         fontWeight: tx.debe > 0 ? '600' : '400',
       }} numberOfLines={1}>
-        {tx.debe > 0 ? formatARS(tx.debe) : '—'}
+        {tx.debe > 0 ? '-$ ' + Math.floor(tx.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
       </Text>
       <Text style={{
         width: COL.entrega, fontSize: fs, textAlign: 'right',
         color: tx.entrega > 0 ? '#22c55e' : '#cbd5e1',
         fontWeight: tx.entrega > 0 ? '600' : '400',
       }} numberOfLines={1}>
-        {tx.entrega > 0 ? formatARS(tx.entrega) : '—'}
+        {tx.entrega > 0 ? '+$ ' + Math.floor(tx.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
       </Text>
       <Text style={{
         width: COL.saldo, fontSize: fs, textAlign: 'right', fontWeight: '700',
-        color: tx.saldo_acumulado > 0 ? '#ef4444' : tx.saldo_acumulado < 0 ? '#2563eb' : '#64748b',
+        color: tx.saldo_acumulado > 0 ? '#16a34a' : tx.saldo_acumulado < 0 ? '#ef4444' : '#64748b',
       }} numberOfLines={1}>
-        {formatARS(tx.saldo_acumulado)}
+        {formatSaldo(tx.saldo_acumulado)}
       </Text>
       {variant === 'negocio' && (
         <Text style={{
@@ -437,11 +615,11 @@ export function TelInput({
 
 function EnviarModal({ client, onClose }: { client: Client; onClose: () => void }) {
   const { transactions, updateClient } = useAppStore();
-  const saldo    = client.saldo ?? 0;
-  const esAFavor = saldo < 0;
+  const saldo    = -(client.saldo ?? 0);
+  const esAFavor = saldo > 0;
   const alDia    = saldo === 0;
   const saldoLabel = alDia ? 'Al día' : esAFavor ? 'A favor' : 'Pendiente de pago';
-  const saldoColor = alDia ? '#64748b' : esAFavor ? '#2563eb' : '#ef4444';
+  const saldoColor = alDia ? '#64748b' : esAFavor ? '#16a34a' : '#ef4444';
   const ultimos5   = transactions.slice(0, 5);
 
   const defaultMensaje = alDia
@@ -462,8 +640,8 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
   const handleEnviar = async () => {
     const movimientosTexto = ultimos5.map((t) => {
       const partes = [];
-      if (t.debe    > 0) partes.push(`Debe: ${formatARS(t.debe)}`);
-      if (t.entrega > 0) partes.push(`Entrega: ${formatARS(t.entrega)}`);
+      if (t.debe    > 0) partes.push(`Salida: ${formatARS(t.debe)}`);
+      if (t.entrega > 0) partes.push(`Entrada: ${formatARS(t.entrega)}`);
       if (t.observaciones) partes.push(t.observaciones);
       return `${formatFecha(t.fecha)} | ${partes.join(' | ')}`;
     }).join('\n');
@@ -535,8 +713,8 @@ function EnviarModal({ client, onClose }: { client: Client; onClose: () => void 
                     {ultimos5.map((t) => (
                       <View key={t.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' }}>
                         <Text style={{ fontSize: 12, color: '#64748b', width: 70 }}>{formatFecha(t.fecha)}</Text>
-                        {t.debe > 0    && <Text style={{ fontSize: 12, color: '#ef4444', fontWeight: '600' }}>Debe: {formatARS(t.debe)}</Text>}
-                        {t.entrega > 0 && <Text style={{ fontSize: 12, color: '#22c55e', fontWeight: '600' }}>Entrega: {formatARS(t.entrega)}</Text>}
+                        {t.debe > 0    && <Text style={{ fontSize: 12, color: '#ef4444', fontWeight: '600' }}>Salida: {formatARS(t.debe)}</Text>}
+                        {t.entrega > 0 && <Text style={{ fontSize: 12, color: '#16a34a', fontWeight: '600' }}>Entrada: {formatARS(t.entrega)}</Text>}
                       </View>
                     ))}
                   </View>
@@ -697,8 +875,8 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
     });
   };
 
-  const saldo    = client.saldo ?? 0;
-  const esAFavor = saldo < 0;
+  const saldo    = -(client.saldo ?? 0); // positivo = más entradas, negativo = más salidas
+  const esAFavor = saldo > 0;
   const alDia    = saldo === 0;
 
   const theme = variant === 'negocio'
@@ -814,13 +992,14 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
         <View style={{ flexDirection: 'row', marginTop: 16, marginHorizontal: -4 }}>
           <KPI
             label="Saldo actual"
-            value={alDia ? 'Al día' : formatARS(saldo)}
-            color={alDia ? '#64748b' : esAFavor ? '#2563eb' : '#ef4444'}
+            value={alDia ? '—' : formatSaldo(saldo)}
+            color={alDia ? '#64748b' : saldo > 0 ? '#16a34a' : '#ef4444'}
+            bold
           />
-          <KPI label="Último debe"
-            value={ultimoDebe ? formatARS(ultimoDebe.debe) : '—'} color="#ef4444" />
-          <KPI label="Último pago"
-            value={ultimaEntrega ? formatARS(ultimaEntrega.entrega) : '—'} color="#22c55e" />
+          <KPI label="Última salida"
+            value={ultimoDebe ? '-$ ' + Math.floor(ultimoDebe.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'} color="#ef4444" />
+          <KPI label="Última entrada"
+            value={ultimaEntrega ? '+$ ' + Math.floor(ultimaEntrega.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'} color="#16a34a" />
         </View>
       </View>
 
@@ -844,8 +1023,8 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f1f5f9',
             }}>
               <Text style={{ width: COL.fecha, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>FECHA</Text>
-              <Text style={{ width: COL.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>DEBE</Text>
-              <Text style={{ width: COL.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>ENTREGA</Text>
+              <Text style={{ width: COL.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'SALIDA\nDINERO'}</Text>
+              <Text style={{ width: COL.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'ENTRADA\nDINERO'}</Text>
               <Text style={{ width: COL.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
               {variant === 'negocio' && (
                 <Text style={{ width: COL.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingHorizontal: 4 }}>TIPO</Text>
@@ -911,20 +1090,20 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
                         color: totalDebe > 0 ? '#ef4444' : '#cbd5e1',
                         fontWeight: totalDebe > 0 ? '600' : '400',
                       }}>
-                        {totalDebe > 0 ? formatARS(totalDebe) : '—'}
+                        {totalDebe > 0 ? '-$ ' + Math.floor(totalDebe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
                       </Text>
                       <Text style={{
                         width: COL.entrega, fontSize: fs, textAlign: 'right',
                         color: totalEntrega > 0 ? '#22c55e' : '#cbd5e1',
                         fontWeight: totalEntrega > 0 ? '600' : '400',
                       }}>
-                        {totalEntrega > 0 ? formatARS(totalEntrega) : '—'}
+                        {totalEntrega > 0 ? '+$ ' + Math.floor(totalEntrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
                       </Text>
                       <Text style={{
                         width: COL.saldo, fontSize: fs, textAlign: 'right', fontWeight: '700',
-                        color: saldoCierre > 0 ? '#ef4444' : saldoCierre < 0 ? '#2563eb' : '#64748b',
+                        color: saldoCierre > 0 ? '#16a34a' : saldoCierre < 0 ? '#ef4444' : '#64748b',
                       }}>
-                        {formatARS(saldoCierre)}
+                        {formatSaldo(saldoCierre)}
                       </Text>
                       <View style={{ width: COL.tipo }} />
                       <Text style={{ flex: 1, fontSize: fs - 1, color: '#94a3b8', paddingLeft: 8 }}>
