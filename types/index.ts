@@ -36,11 +36,19 @@ export interface Transaction {
   debe: number;
   entrega: number;
   observaciones: string | null;
+  tipo: string | null;
   fecha: string; // ISO date YYYY-MM-DD
   creado_por: string;
   creado_por_nombre?: string;
   created_at: string;
   anulada: boolean;
+}
+
+export interface NegocioTipo {
+  id: string;
+  org_id: string;
+  nombre: string;
+  created_at: string;
 }
 
 // Saldo acumulado por fila para mostrar en tabla
@@ -69,6 +77,15 @@ export interface Meta {
   puntuacion: number;
   activo: boolean;
   created_at: string;
+}
+
+export interface MetasConfig {
+  id: string;
+  org_id: string;
+  puntos_iniciales: number;
+  nombre_objetivo: string | null;
+  puntos_objetivo: number | null;
+  updated_at: string;
 }
 
 export interface MetaRegistro {

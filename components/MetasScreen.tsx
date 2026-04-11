@@ -3,9 +3,8 @@ import {
   View, Text, TouchableOpacity, ScrollView, TextInput,
   ActivityIndicator, Platform, Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useAppStore } from '../../lib/store';
-import type { Meta } from '../../types';
+import { useAppStore } from '../lib/store';
+import type { Meta, MetaRegistro } from '../types';
 
 // ── helpers ───────────────────────────────────────────────────
 
@@ -60,6 +59,37 @@ function generateDays(startDate: string, endDate: string): string[] {
   return days;
 }
 
+function computeTotalScore(
+  metas: Meta[],
+  allRegistros: MetaRegistro[],
+  puntosIniciales: number,
+): number {
+  const activeMetas = metas.filter(m => m.activo);
+  if (activeMetas.length === 0) return puntosIniciales;
+
+  const earliest = activeMetas.reduce((min, m) => {
+    const d = m.created_at.slice(0, 10);
+    return d < min ? d : min;
+  }, todayStr());
+
+  const allDays = generateDays(earliest, todayStr());
+
+  const regMap = new Map<string, boolean>();
+  for (const r of allRegistros) {
+    regMap.set(`${r.meta_id}:${r.fecha}`, r.cumplida);
+  }
+
+  let total = puntosIniciales;
+  for (const fecha of allDays) {
+    for (const m of activeMetas) {
+      if (m.created_at.slice(0, 10) > fecha) continue;
+      const cumplida = regMap.get(`${m.id}:${fecha}`) ?? false;
+      total += cumplida ? m.puntuacion : -m.puntuacion;
+    }
+  }
+  return total;
+}
+
 // ── styles ────────────────────────────────────────────────────
 
 const cardStyle = {
@@ -91,23 +121,15 @@ const labelStyle = {
   marginBottom: 4,
 };
 
-// ── main screen ───────────────────────────────────────────────
+// ── component ─────────────────────────────────────────────────
 
 export default function MetasScreen() {
-  const router = useRouter();
   const {
-    profile,
-    metas, metasLoading, metaRegistros,
+    metas, metasLoading, metaRegistros, metasConfig,
     loadMetas, createMeta, updateMeta, archivarMeta,
-    loadMetaRegistros, toggleMetaRegistro,
+    loadMetaRegistros, loadAllMetaRegistros, toggleMetaRegistro,
+    loadMetasConfig, saveMetasConfig,
   } = useAppStore();
-
-  // Redirect non-owners
-  useEffect(() => {
-    if (profile && profile.rol !== 'owner') {
-      router.replace('/(app)');
-    }
-  }, [profile]);
 
   const today     = todayStr();
   const startDate = subtractDays(today, 29);
@@ -118,17 +140,61 @@ export default function MetasScreen() {
   const [editingMeta, setEditingMeta]     = useState<Meta | null>(null);
   const [showForm, setShowForm]           = useState(false);
 
-  // form
-  const [titulo, setTitulo]         = useState('');
-  const [notas, setNotas]           = useState('');
-  const [puntuacion, setPuntuacion] = useState('1');
+  // form metas
+  const [titulo, setTitulo]           = useState('');
+  const [notas, setNotas]             = useState('');
+  const [puntuacion, setPuntuacion]   = useState('1');
   const [formLoading, setFormLoading] = useState(false);
-  const [formError, setFormError]   = useState<string | null>(null);
+  const [formError, setFormError]     = useState<string | null>(null);
+
+  // Metas General
+  const [showGeneral, setShowGeneral]       = useState(true);
+  const [editandoGeneral, setEditandoGeneral] = useState(false);
+  const [cfgNombre, setCfgNombre]           = useState('');
+  const [cfgInicial, setCfgInicial]         = useState('778');
+  const [cfgObjetivo, setCfgObjetivo]       = useState('');
+  const [cfgLoading, setCfgLoading]         = useState(false);
+  const [cfgError, setCfgError]             = useState<string | null>(null);
 
   useEffect(() => {
     loadMetas();
-    loadMetaRegistros(startDate, today);
+    loadAllMetaRegistros();
+    loadMetasConfig();
   }, []);
+
+  // Sincronizar formulario con config cargada
+  useEffect(() => {
+    if (metasConfig) {
+      setCfgNombre(metasConfig.nombre_objetivo ?? '');
+      setCfgInicial(String(metasConfig.puntos_iniciales));
+      setCfgObjetivo(metasConfig.puntos_objetivo != null ? String(metasConfig.puntos_objetivo) : '');
+    }
+  }, [metasConfig]);
+
+  const handleGuardarGeneral = async () => {
+    const inicial  = parseInt(cfgInicial, 10);
+    const objetivo = cfgObjetivo.trim() ? parseInt(cfgObjetivo, 10) : null;
+    if (isNaN(inicial)) { setCfgError('El puntuaje inicial debe ser un número'); return; }
+    if (objetivo !== null && isNaN(objetivo)) { setCfgError('El objetivo debe ser un número'); return; }
+    setCfgLoading(true); setCfgError(null);
+    const err = await saveMetasConfig({
+      puntos_iniciales: inicial,
+      nombre_objetivo:  cfgNombre,
+      puntos_objetivo:  objetivo,
+    });
+    setCfgLoading(false);
+    if (err) { setCfgError(err); return; }
+    setEditandoGeneral(false);
+  };
+
+  // Puntuaje total acumulado
+  const puntosIniciales = metasConfig?.puntos_iniciales ?? 0;
+  const totalScore      = computeTotalScore(metas, metaRegistros, puntosIniciales);
+  const objetivo        = metasConfig?.puntos_objetivo ?? null;
+  const faltaPts        = objetivo != null ? objetivo - totalScore : null;
+  const progresoPct     = objetivo != null && objetivo > 0
+    ? Math.min(100, Math.max(0, Math.round((totalScore / objetivo) * 100)))
+    : null;
 
   const toggleDay = (fecha: string) => {
     setExpandedDays(prev => {
@@ -138,7 +204,6 @@ export default function MetasScreen() {
     });
   };
 
-  // Lookup: "metaId:fecha" → registro
   const registroMap = new Map<string, { cumplida: boolean }>();
   for (const r of metaRegistros) {
     registroMap.set(`${r.meta_id}:${r.fecha}`, { cumplida: r.cumplida });
@@ -149,8 +214,7 @@ export default function MetasScreen() {
       .filter(m => m.activo && m.created_at.slice(0, 10) <= fecha)
       .reduce((sum, m) => {
         const reg = registroMap.get(`${m.id}:${fecha}`);
-        const cumplida = reg?.cumplida ?? false;
-        return sum + (cumplida ? m.puntuacion : -m.puntuacion);
+        return sum + ((reg?.cumplida ?? false) ? m.puntuacion : -m.puntuacion);
       }, 0);
   }
 
@@ -175,7 +239,7 @@ export default function MetasScreen() {
 
   const handleSave = async () => {
     const pts = parseInt(puntuacion, 10);
-    if (!titulo.trim())      { setFormError('El título es obligatorio'); return; }
+    if (!titulo.trim())        { setFormError('El título es obligatorio'); return; }
     if (isNaN(pts) || pts < 1) { setFormError('La puntuación debe ser un número positivo'); return; }
     setFormLoading(true); setFormError(null);
     const data = { titulo: titulo.trim(), notas: notas.trim(), puntuacion: pts };
@@ -196,6 +260,134 @@ export default function MetasScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#f8fafc' }} contentContainerStyle={{ padding: 16 }}>
+
+      {/* ── Metas General ────────────────────────────────── */}
+      <View style={cardStyle}>
+        <TouchableOpacity
+          onPress={() => setShowGeneral(!showGeneral)}
+          activeOpacity={0.8}
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}
+        >
+          <Text style={{ fontSize: 16, marginRight: 10 }}>🏆</Text>
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#1e293b' }}>
+            {metasConfig?.nombre_objetivo ?? 'Metas General'}
+          </Text>
+          <Text style={{ color: '#94a3b8', fontSize: 14 }}>{showGeneral ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+
+        {showGeneral && (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <View style={{ height: 1, backgroundColor: '#f1f5f9', marginBottom: 14 }} />
+
+            {!editandoGeneral ? (
+              <>
+                {/* Puntuaje actual */}
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+                  <Text style={{ fontSize: 32, fontWeight: '800', color: totalScore >= 0 ? '#1e293b' : '#dc2626' }}>
+                    {totalScore}
+                  </Text>
+                  <Text style={{ fontSize: 14, color: '#64748b' }}>pts actuales</Text>
+                </View>
+
+                {objetivo != null && (
+                  <>
+                    {/* Barra de progreso */}
+                    <View style={{ height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, marginBottom: 8, overflow: 'hidden' }}>
+                      <View style={{
+                        height: 8, borderRadius: 4,
+                        width: `${progresoPct}%` as any,
+                        backgroundColor: faltaPts! <= 0 ? '#16a34a' : '#2563eb',
+                      }} />
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <Text style={{ fontSize: 12, color: '#94a3b8' }}>
+                        Objetivo: {objetivo} pts
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>
+                        {progresoPct}%
+                      </Text>
+                    </View>
+
+                    {faltaPts! > 0 ? (
+                      <View style={{ backgroundColor: '#eff6ff', borderRadius: 10, padding: 12 }}>
+                        <Text style={{ fontSize: 13, color: '#2563eb', fontWeight: '500', textAlign: 'center' }}>
+                          Te faltan{' '}
+                          <Text style={{ fontWeight: '800' }}>{faltaPts}</Text>
+                          {' '}pts para lograrlo
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={{ backgroundColor: '#dcfce7', borderRadius: 10, padding: 12 }}>
+                        <Text style={{ fontSize: 13, color: '#16a34a', fontWeight: '700', textAlign: 'center' }}>
+                          🎉 ¡Objetivo alcanzado!
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                )}
+
+                <TouchableOpacity
+                  onPress={() => setEditandoGeneral(true)}
+                  style={{
+                    marginTop: 14, borderRadius: 8, paddingVertical: 9, alignItems: 'center',
+                    backgroundColor: '#f1f5f9',
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: '#475569', fontWeight: '500' }}>
+                    {metasConfig ? 'Editar objetivo' : 'Configurar objetivo'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              /* Formulario edición */
+              <View style={{ gap: 10 }}>
+                <View>
+                  <Text style={labelStyle}>Nombre del objetivo</Text>
+                  <TextInput style={inputStyle} placeholder="Ej: Meta 2025"
+                    placeholderTextColor="#94a3b8" value={cfgNombre} onChangeText={setCfgNombre}
+                    autoCapitalize="sentences" />
+                </View>
+                <View>
+                  <Text style={labelStyle}>Puntuaje inicial</Text>
+                  <TextInput style={{ ...inputStyle, width: 120 }} placeholder="0"
+                    placeholderTextColor="#94a3b8" value={cfgInicial} onChangeText={setCfgInicial}
+                    keyboardType="number-pad" />
+                </View>
+                <View>
+                  <Text style={labelStyle}>Puntuaje objetivo</Text>
+                  <TextInput style={{ ...inputStyle, width: 120 }} placeholder="Ej: 1000"
+                    placeholderTextColor="#94a3b8" value={cfgObjetivo} onChangeText={setCfgObjetivo}
+                    keyboardType="number-pad" />
+                </View>
+                {cfgError && (
+                  <View style={{ backgroundColor: '#fee2e2', borderRadius: 8, padding: 10 }}>
+                    <Text style={{ color: '#dc2626', fontSize: 13 }}>{cfgError}</Text>
+                  </View>
+                )}
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                  <TouchableOpacity
+                    onPress={() => { setEditandoGeneral(false); setCfgError(null); }}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: '#f1f5f9' }}
+                  >
+                    <Text style={{ color: '#475569', fontWeight: '500' }}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleGuardarGeneral}
+                    disabled={cfgLoading}
+                    style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: '#2563eb' }}
+                  >
+                    {cfgLoading
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
 
       {/* ── Gestionar Metas ──────────────────────────────── */}
       <View style={cardStyle}>
@@ -241,10 +433,7 @@ export default function MetasScreen() {
                     </View>
                     <TouchableOpacity
                       onPress={() => openEdit(m)}
-                      style={{
-                        paddingHorizontal: 8, paddingVertical: 5,
-                        borderRadius: 6, backgroundColor: '#f1f5f9', marginRight: 6,
-                      }}
+                      style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, backgroundColor: '#f1f5f9', marginRight: 6 }}
                     >
                       <Text style={{ fontSize: 12, color: '#475569' }}>Editar</Text>
                     </TouchableOpacity>
@@ -263,7 +452,6 @@ export default function MetasScreen() {
                   </Text>
                 )}
 
-                {/* Formulario crear / editar */}
                 {showForm ? (
                   <View style={{ marginTop: 14, gap: 10 }}>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e293b' }}>
@@ -271,37 +459,23 @@ export default function MetasScreen() {
                     </Text>
                     <View>
                       <Text style={labelStyle}>Título</Text>
-                      <TextInput
-                        style={inputStyle}
-                        placeholder="Ej: Hacer ejercicio"
-                        placeholderTextColor="#94a3b8"
-                        value={titulo}
-                        onChangeText={setTitulo}
-                        autoCapitalize="sentences"
-                      />
+                      <TextInput style={inputStyle} placeholder="Ej: Hacer ejercicio"
+                        placeholderTextColor="#94a3b8" value={titulo} onChangeText={setTitulo}
+                        autoCapitalize="sentences" />
                     </View>
                     <View>
                       <Text style={labelStyle}>Notas (opcional)</Text>
                       <TextInput
                         style={{ ...inputStyle, minHeight: 60, textAlignVertical: 'top' }}
                         placeholder="Descripción o detalle..."
-                        placeholderTextColor="#94a3b8"
-                        value={notas}
-                        onChangeText={setNotas}
-                        multiline
-                        numberOfLines={3}
-                      />
+                        placeholderTextColor="#94a3b8" value={notas} onChangeText={setNotas}
+                        multiline numberOfLines={3} />
                     </View>
                     <View>
                       <Text style={labelStyle}>Puntuación</Text>
-                      <TextInput
-                        style={{ ...inputStyle, width: 100 }}
-                        placeholder="1"
-                        placeholderTextColor="#94a3b8"
-                        value={puntuacion}
-                        onChangeText={setPuntuacion}
-                        keyboardType="number-pad"
-                      />
+                      <TextInput style={{ ...inputStyle, width: 100 }} placeholder="1"
+                        placeholderTextColor="#94a3b8" value={puntuacion} onChangeText={setPuntuacion}
+                        keyboardType="number-pad" />
                     </View>
                     {formError && (
                       <View style={{ backgroundColor: '#fee2e2', borderRadius: 8, padding: 10 }}>
@@ -309,23 +483,12 @@ export default function MetasScreen() {
                       </View>
                     )}
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                      <TouchableOpacity
-                        onPress={() => setShowForm(false)}
-                        style={{
-                          flex: 1, paddingVertical: 10, borderRadius: 8,
-                          alignItems: 'center', backgroundColor: '#f1f5f9',
-                        }}
-                      >
+                      <TouchableOpacity onPress={() => setShowForm(false)}
+                        style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: '#f1f5f9' }}>
                         <Text style={{ color: '#475569', fontWeight: '500' }}>Cancelar</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={handleSave}
-                        disabled={formLoading}
-                        style={{
-                          flex: 1, paddingVertical: 10, borderRadius: 8,
-                          alignItems: 'center', backgroundColor: '#2563eb',
-                        }}
-                      >
+                      <TouchableOpacity onPress={handleSave} disabled={formLoading}
+                        style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: '#2563eb' }}>
                         {formLoading
                           ? <ActivityIndicator color="#fff" size="small" />
                           : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar</Text>
@@ -334,28 +497,21 @@ export default function MetasScreen() {
                     </View>
                   </View>
                 ) : (
-                  <TouchableOpacity
-                    onPress={openCreate}
-                    style={{
-                      marginTop: 12, backgroundColor: '#2563eb', borderRadius: 9,
-                      paddingVertical: 10, alignItems: 'center',
-                    }}
-                  >
+                  <TouchableOpacity onPress={openCreate} style={{
+                    marginTop: 12, backgroundColor: '#2563eb', borderRadius: 9,
+                    paddingVertical: 10, alignItems: 'center',
+                  }}>
                     <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>+ Nueva meta</Text>
                   </TouchableOpacity>
                 )}
 
-                {/* Metas archivadas */}
                 {archivedMetas.length > 0 && (
                   <View style={{ marginTop: 16 }}>
                     <Text style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
                       Archivadas ({archivedMetas.length})
                     </Text>
                     {archivedMetas.map(m => (
-                      <View key={m.id} style={{
-                        flexDirection: 'row', alignItems: 'center',
-                        paddingVertical: 8, opacity: 0.55,
-                      }}>
+                      <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, opacity: 0.55 }}>
                         <Text style={{ flex: 1, fontSize: 13, color: '#64748b' }}>{m.titulo}</Text>
                         <Text style={{ fontSize: 12, color: '#94a3b8' }}>{m.puntuacion} pts</Text>
                       </View>
@@ -389,13 +545,8 @@ export default function MetasScreen() {
 
           return (
             <View key={fecha} style={{
-              backgroundColor: '#fff',
-              borderRadius: 14,
-              marginBottom: 8,
-              shadowColor: '#000',
-              shadowOpacity: 0.04,
-              shadowRadius: 3,
-              elevation: 1,
+              backgroundColor: '#fff', borderRadius: 14, marginBottom: 8,
+              shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
               overflow: 'hidden',
               borderLeftWidth: isToday ? 3 : 0,
               borderLeftColor: '#2563eb',
@@ -440,7 +591,6 @@ export default function MetasScreen() {
                           borderBottomWidth: 1, borderBottomColor: '#f8fafc',
                         }}
                       >
-                        {/* Checkbox */}
                         <View style={{
                           width: 22, height: 22, borderRadius: 6,
                           borderWidth: 2,
@@ -449,11 +599,8 @@ export default function MetasScreen() {
                           alignItems: 'center', justifyContent: 'center',
                           marginRight: 12,
                         }}>
-                          {cumplida && (
-                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓</Text>
-                          )}
+                          {cumplida && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓</Text>}
                         </View>
-
                         <Text style={{
                           flex: 1, fontSize: 14,
                           color: cumplida ? '#16a34a' : '#475569',
@@ -461,15 +608,11 @@ export default function MetasScreen() {
                         }}>
                           {m.titulo}
                         </Text>
-
                         <View style={{
                           borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2,
                           backgroundColor: cumplida ? '#dcfce7' : '#fee2e2',
                         }}>
-                          <Text style={{
-                            fontSize: 12, fontWeight: '600',
-                            color: cumplida ? '#16a34a' : '#dc2626',
-                          }}>
+                          <Text style={{ fontSize: 12, fontWeight: '600', color: cumplida ? '#16a34a' : '#dc2626' }}>
                             {cumplida ? '+' : '−'}{m.puntuacion}
                           </Text>
                         </View>

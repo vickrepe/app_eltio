@@ -1,7 +1,7 @@
 import { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Client, Meta, MetaRegistro, Organization, Profile, Transaction } from '../types';
+import type { Client, Meta, MetaRegistro, MetasConfig, NegocioTipo, Organization, Profile, Transaction } from '../types';
 
 interface AppState {
   // Auth
@@ -44,6 +44,7 @@ interface AppState {
     entrega: number;
     observaciones: string;
     fecha: string;
+    tipo?: string;
   }) => Promise<string | null>;
   cancelarTransaccion: (transactionId: string, clientId: string) => Promise<string | null>;
 
@@ -61,16 +62,25 @@ interface AppState {
   updateUserRol: (profileId: string, rol: string) => Promise<string | null>;
   removeUser: (profileId: string) => Promise<string | null>;
 
+  // Tipos personalizados negocio
+  negocioTipos:      NegocioTipo[];
+  loadNegocioTipos:  () => Promise<void>;
+  saveNegocioTipo:   (nombre: string) => Promise<string | null>;
+
   // Metas
   metas:              Meta[];
   metasLoading:       boolean;
   metaRegistros:      MetaRegistro[];
+  metasConfig:        MetasConfig | null;
   loadMetas:          () => Promise<void>;
   createMeta:         (data: { titulo: string; notas: string; puntuacion: number }) => Promise<string | null>;
   updateMeta:         (metaId: string, data: { titulo: string; notas: string; puntuacion: number }) => Promise<string | null>;
   archivarMeta:       (metaId: string) => Promise<string | null>;
   loadMetaRegistros:  (startDate: string, endDate: string) => Promise<void>;
+  loadAllMetaRegistros: () => Promise<void>;
   toggleMetaRegistro: (metaId: string, fecha: string, cumplida: boolean) => Promise<string | null>;
+  loadMetasConfig:    () => Promise<void>;
+  saveMetasConfig:    (data: { puntos_iniciales: number; nombre_objetivo: string; puntos_objetivo: number | null }) => Promise<string | null>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -88,9 +98,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   transactions:        [],
   transactionsLoading: false,
   orgUsers:         [],
+  negocioTipos:     [],
   metas:            [],
   metasLoading:     false,
   metaRegistros:    [],
+  metasConfig:      null,
 
   setSession: (session) => {
     set({ session, user: session?.user ?? null, authLoading: false });
@@ -224,7 +236,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ transactionsLoading: false });
   },
 
-  createTransaction: async ({ client_id, debe, entrega, observaciones, fecha }) => {
+  createTransaction: async ({ client_id, debe, entrega, observaciones, fecha, tipo }) => {
     const { organization, profile } = get();
     if (!organization || !profile) return 'Sesión inválida';
 
@@ -234,6 +246,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       debe,
       entrega,
       observaciones: observaciones.trim() || null,
+      tipo:          tipo?.trim() || null,
       fecha,
       creado_por:   profile.id,
     });
@@ -375,6 +388,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     return null;
   },
 
+  loadNegocioTipos: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('negocio_tipos')
+      .select('*')
+      .eq('org_id', organization.id)
+      .order('created_at');
+    if (data) set({ negocioTipos: data as NegocioTipo[] });
+  },
+
+  saveNegocioTipo: async (nombre) => {
+    const { organization } = get();
+    if (!organization) return 'Sin organización activa';
+    const { error } = await supabase.from('negocio_tipos').insert({
+      org_id: organization.id,
+      nombre: nombre.trim(),
+    });
+    if (error) return error.message;
+    await get().loadNegocioTipos();
+    return null;
+  },
+
   loadMetas: async () => {
     const { organization } = get();
     if (!organization) return;
@@ -432,6 +468,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       .gte('fecha', startDate)
       .lte('fecha', endDate);
     if (data) set({ metaRegistros: data as MetaRegistro[] });
+  },
+
+  loadAllMetaRegistros: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('meta_registros')
+      .select('*')
+      .eq('org_id', organization.id);
+    if (data) set({ metaRegistros: data as MetaRegistro[] });
+  },
+
+  loadMetasConfig: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('metas_config')
+      .select('*')
+      .eq('org_id', organization.id)
+      .maybeSingle();
+    set({ metasConfig: data as MetasConfig | null });
+  },
+
+  saveMetasConfig: async ({ puntos_iniciales, nombre_objetivo, puntos_objetivo }) => {
+    const { organization } = get();
+    if (!organization) return 'Sin organización activa';
+    const { error } = await supabase.from('metas_config').upsert(
+      {
+        org_id: organization.id,
+        puntos_iniciales,
+        nombre_objetivo: nombre_objetivo.trim() || null,
+        puntos_objetivo,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id' }
+    );
+    if (error) return error.message;
+    await get().loadMetasConfig();
+    return null;
   },
 
   toggleMetaRegistro: async (metaId, fecha, cumplida) => {

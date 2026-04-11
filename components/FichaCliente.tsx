@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Modal,
   ActivityIndicator, Platform, Alert, KeyboardAvoidingView,
@@ -34,7 +34,7 @@ export function calcularSaldos(txs: Transaction[]): TransactionWithSaldo[] {
   }).reverse();
 }
 
-export const COL = { fecha: 80, debe: 72, entrega: 72, saldo: 72, trash: 30 };
+export const COL = { fecha: 80, debe: 72, entrega: 72, saldo: 72, tipo: 88, trash: 30 };
 
 // ─── KPI ─────────────────────────────────────────────────────
 
@@ -56,15 +56,46 @@ function KPI({ label, value, color }: { label: string; value: string; color: str
   );
 }
 
+const TIPOS_FIJOS = ['Ventas', 'Empleados', 'Gastos Casa', 'Proveedores'];
+
 // ─── MovimientoForm ──────────────────────────────────────────
 
-function MovimientoForm({ clientId, onClose }: { clientId: string; onClose: () => void }) {
-  const { createTransaction } = useAppStore();
+function MovimientoForm({
+  clientId, variant, onClose,
+}: {
+  clientId: string;
+  variant?: string;
+  onClose: () => void;
+}) {
+  const { createTransaction, negocioTipos, loadNegocioTipos, saveNegocioTipo } = useAppStore();
   const [debe, setDebe]       = useState('');
   const [entrega, setEntrega] = useState('');
   const [obs, setObs]         = useState('');
   const [fecha, setFecha]     = useState(todayISO());
   const [loading, setLoading] = useState(false);
+
+  // Tipo (negocio only)
+  const [selectedTipo, setSelectedTipo] = useState('');
+  const [customNombre, setCustomNombre] = useState('');
+  const [savingTipo, setSavingTipo]     = useState(false);
+  const [tipoGuardado, setTipoGuardado] = useState(false);
+
+  const isNegocio = variant === 'negocio';
+
+  useEffect(() => {
+    if (isNegocio) loadNegocioTipos();
+  }, []);
+
+  const customGuardados = negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n));
+  const tiposDisponibles = [...TIPOS_FIJOS, ...customGuardados, 'Personalizado'];
+
+  const handleGuardarTipoNuevo = async () => {
+    if (!customNombre.trim()) return;
+    setSavingTipo(true);
+    const err = await saveNegocioTipo(customNombre.trim());
+    setSavingTipo(false);
+    if (!err) setTipoGuardado(true);
+  };
 
   const handleGuardar = async () => {
     const debeNum    = parseFloat(debe.replace(',', '.'))    || 0;
@@ -73,10 +104,13 @@ function MovimientoForm({ clientId, onClose }: { clientId: string; onClose: () =
       Alert.alert('Error', 'Ingresá al menos un monto en Debe o Entrega');
       return;
     }
+    const tipo = isNegocio
+      ? (selectedTipo === 'Personalizado' ? customNombre.trim() || undefined : selectedTipo || undefined)
+      : undefined;
     setLoading(true);
     const err = await createTransaction({
       client_id: clientId, debe: debeNum, entrega: entregaNum,
-      observaciones: obs, fecha,
+      observaciones: obs, fecha, tipo,
     });
     setLoading(false);
     if (err) { Alert.alert('Error', err); return; }
@@ -112,6 +146,71 @@ function MovimientoForm({ clientId, onClose }: { clientId: string; onClose: () =
             value={fecha} onChangeText={setFecha} />
         </View>
 
+        {/* Tipo — solo en negocio */}
+        {isNegocio && (
+          <View>
+            <Text style={labelStyle}>Tipo</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {tiposDisponibles.map((t) => {
+                const active = selectedTipo === t;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    onPress={() => {
+                      setSelectedTipo(active ? '' : t);
+                      setTipoGuardado(false);
+                      if (t !== 'Personalizado') setCustomNombre('');
+                    }}
+                    style={{
+                      paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
+                      borderWidth: 1.5,
+                      borderColor: active ? '#dc2626' : '#e2e8f0',
+                      backgroundColor: active ? '#fee2e2' : '#f8fafc',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 13, fontWeight: active ? '600' : '400',
+                      color: active ? '#dc2626' : '#64748b',
+                    }}>
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Campo personalizado */}
+            {selectedTipo === 'Personalizado' && (
+              <View style={{ marginTop: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <TextInput
+                  style={[inputStyle, { flex: 1, paddingVertical: 8, fontSize: 14 }]}
+                  placeholder="Nombre del tipo de gasto"
+                  placeholderTextColor="#94a3b8"
+                  value={customNombre}
+                  onChangeText={(v) => { setCustomNombre(v); setTipoGuardado(false); }}
+                  autoCapitalize="sentences"
+                />
+                <TouchableOpacity
+                  onPress={handleGuardarTipoNuevo}
+                  disabled={savingTipo || tipoGuardado || !customNombre.trim()}
+                  style={{
+                    paddingHorizontal: 10, paddingVertical: 9, borderRadius: 8,
+                    backgroundColor: tipoGuardado ? '#dcfce7' : '#fff7ed',
+                    opacity: !customNombre.trim() ? 0.5 : 1,
+                  }}
+                >
+                  {savingTipo
+                    ? <ActivityIndicator size="small" color="#ea580c" />
+                    : <Text style={{ fontSize: 12, fontWeight: '600', color: tipoGuardado ? '#16a34a' : '#ea580c' }}>
+                        {tipoGuardado ? '✓ Guardado' : 'Guardar tipo'}
+                      </Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
         <View>
           <Text style={labelStyle}>Observaciones</Text>
           <TextInput style={[inputStyle, { minHeight: 60 }]}
@@ -139,7 +238,7 @@ function MovimientoForm({ clientId, onClose }: { clientId: string; onClose: () =
 
 // ─── FilaTransaccion ─────────────────────────────────────────
 
-function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId: string }) {
+function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; clientId: string; variant?: string }) {
   const { cancelarTransaccion } = useAppStore();
   const [hoverTrash, setHoverTrash] = useState(false);
   const [showInfo, setShowInfo]     = useState(false);
@@ -230,7 +329,16 @@ function FilaTransaccion({ tx, clientId }: { tx: TransactionWithSaldo; clientId:
       }} numberOfLines={1}>
         {formatARS(tx.saldo_acumulado)}
       </Text>
-      <Text style={{ flex: 1, fontSize: fs, color: '#94a3b8', paddingLeft: 8 }}>
+      {variant === 'negocio' && (
+        <Text style={{
+          width: COL.tipo, fontSize: fs, paddingHorizontal: 4,
+          color: tx.tipo ? '#1e293b' : '#cbd5e1',
+          fontWeight: tx.tipo ? '600' : '400',
+        }} numberOfLines={1}>
+          {tx.tipo ?? '—'}
+        </Text>
+      )}
+      <Text style={{ flex: 1, fontSize: fs, color: '#94a3b8', paddingLeft: 8 }} numberOfLines={2}>
         {tx.observaciones ?? '—'}
       </Text>
       <TouchableOpacity
@@ -739,13 +847,16 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               <Text style={{ width: COL.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>DEBE</Text>
               <Text style={{ width: COL.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>ENTREGA</Text>
               <Text style={{ width: COL.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
+              {variant === 'negocio' && (
+                <Text style={{ width: COL.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingHorizontal: 4 }}>TIPO</Text>
+              )}
               <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingLeft: 8 }}>OBSERVACIONES</Text>
               <View style={{ width: COL.trash }} />
             </View>
 
             {/* Filas: agrupadas por día solo en negocio, planas en agencia */}
             {variant !== 'negocio' && txsConSaldo.map((tx) => (
-              <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} />
+              <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} variant={variant} />
             ))}
             {variant === 'negocio' && (() => {
               const hoy = todayISO();
@@ -766,7 +877,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
 
                 if (esHoy) {
                   return txsDia.map(tx => (
-                    <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} />
+                    <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} variant={variant} />
                   ));
                 }
 
@@ -815,6 +926,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
                       }}>
                         {formatARS(saldoCierre)}
                       </Text>
+                      <View style={{ width: COL.tipo }} />
                       <Text style={{ flex: 1, fontSize: fs - 1, color: '#94a3b8', paddingLeft: 8 }}>
                         {count} mov.
                       </Text>
@@ -824,7 +936,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
                     {/* Filas individuales expandidas */}
                     {expandido && txsDia.map(tx => (
                       <View key={tx.id} style={{ backgroundColor: '#fafafa', borderLeftWidth: 3, borderLeftColor: '#e2e8f0' }}>
-                        <FilaTransaccion tx={tx} clientId={client.id} />
+                        <FilaTransaccion tx={tx} clientId={client.id} variant={variant} />
                       </View>
                     ))}
                   </View>
@@ -849,7 +961,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
             <Text style={{ fontSize: 17, fontWeight: '700', color: '#1e293b', marginBottom: 16 }}>
               Nuevo movimiento — {client.nombre}
             </Text>
-            <MovimientoForm clientId={client.id} onClose={() => setShowForm(false)} />
+            <MovimientoForm clientId={client.id} variant={variant} onClose={() => setShowForm(false)} />
           </View>
         </View>
       </Modal>

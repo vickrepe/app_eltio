@@ -51,6 +51,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="metas"
+        options={{
+          title: 'Metas',
+          href: profile?.rol === 'owner' ? undefined : null,
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',
