@@ -34,7 +34,67 @@ export function calcularSaldos(txs: Transaction[]): TransactionWithSaldo[] {
   }).reverse();
 }
 
-export const COL = { fecha: 80, debe: 72, entrega: 72, saldo: 72, tipo: 88, trash: 30 };
+function useColWidths(variant?: string) {
+  const { width: sw } = useWindowDimensions();
+  const isNegocio = variant === 'negocio';
+  const ph = sw < 768 ? 8 : 28;
+  const available = sw - ph * 2;
+  const trash = 30;
+  const base = { fecha: 80, debe: 72, entrega: 72, saldo: 72, tipo: 88 };
+  const fixedSum = base.fecha + base.debe + base.entrega + base.saldo
+    + (isNegocio ? base.tipo : 0) + trash;
+  const minObs = 44;
+  if (available >= fixedSum + minObs) return { ...base, trash };
+  const scale = Math.max(0.55, (available - minObs - trash) / (fixedSum - trash));
+  return {
+    fecha:   Math.round(base.fecha   * scale),
+    debe:    Math.round(base.debe    * scale),
+    entrega: Math.round(base.entrega * scale),
+    saldo:   Math.round(base.saldo   * scale),
+    tipo:    Math.round(base.tipo    * scale),
+    trash,
+  };
+}
+
+// ─── AmountCell ──────────────────────────────────────────────
+
+function AmountCell({
+  value, style, children,
+}: {
+  value: string;
+  style?: object;
+  children: React.ReactNode;
+}) {
+  const [visible, setVisible] = useState(false);
+  if (value === '—') return <View style={style}>{children}</View>;
+  return (
+    <>
+      <TouchableOpacity
+        activeOpacity={0.6}
+        onPress={(e) => { e.stopPropagation?.(); setVisible(true); }}
+        style={style}
+      >
+        {children}
+      </TouchableOpacity>
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
+        <TouchableOpacity
+          style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.25)' }}
+          activeOpacity={1}
+          onPress={() => setVisible(false)}
+        >
+          <View style={{
+            backgroundColor: '#1e293b', paddingHorizontal: 20, paddingVertical: 14,
+            borderRadius: 12, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8,
+          }}>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', letterSpacing: 0.5 }}>
+              {value}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+}
 
 // ─── KPI ─────────────────────────────────────────────────────
 
@@ -48,10 +108,12 @@ function KPI({ label, value, color, bold }: { label: string; value: string; colo
         numberOfLines={1}>
         {label}
       </Text>
-      <Text style={{ fontSize: bold ? 17 : 15, fontWeight: '700', color, marginTop: 3 }}
-        numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-        {value}
-      </Text>
+      <AmountCell value={value} style={{ marginTop: 3 }}>
+        <Text style={{ fontSize: bold ? 17 : 15, fontWeight: '700', color }}
+          numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+          {value}
+        </Text>
+      </AmountCell>
     </View>
   );
 }
@@ -61,10 +123,11 @@ const TIPOS_FIJOS = ['Ventas', 'Empleados', 'Gastos Casa', 'Proveedores'];
 // ─── MovimientoForm ──────────────────────────────────────────
 
 function MovimientoForm({
-  clientId, variant, onClose,
+  clientId, variant, currentSaldo, onClose,
 }: {
   clientId: string;
   variant?: string;
+  currentSaldo?: number;
   onClose: () => void;
 }) {
   const { createTransaction, negocioTipos, loadNegocioTipos, saveNegocioTipo } = useAppStore();
@@ -127,6 +190,21 @@ function MovimientoForm({
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={{ gap: 12 }}>
+        {currentSaldo !== undefined && (
+          <View style={{
+            flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+            backgroundColor: currentSaldo > 0 ? '#f0fdf4' : currentSaldo < 0 ? '#fef2f2' : '#f8fafc',
+            borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+          }}>
+            <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500' }}>Saldo actual</Text>
+            <Text style={{
+              fontSize: 16, fontWeight: '700',
+              color: currentSaldo > 0 ? '#16a34a' : currentSaldo < 0 ? '#ef4444' : '#64748b',
+            }}>
+              {currentSaldo === 0 ? '—' : formatSaldo(currentSaldo)}
+            </Text>
+          </View>
+        )}
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <View style={{ flex: 1 }}>
             <Text style={labelStyle}>Salida ($)</Text>
@@ -310,6 +388,7 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
   const narrow = sw < 768;
   const fs = narrow ? 11 : 13;
   const ph = narrow ? 8 : 28;
+  const col = useColWidths(variant);
   const hora = formatHora(tx.created_at);
   const usuario = tx.creado_por_nombre ?? 'Desconocido';
 
@@ -322,7 +401,7 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
       {/* FECHA — clicable, abre modal con hora y usuario */}
       <TouchableOpacity
         onPress={() => setShowInfo(true)}
-        style={{ width: COL.fecha }}
+        style={{ width: col.fecha }}
         activeOpacity={0.7}
       >
         <Text style={{
@@ -360,17 +439,15 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
               <Text style={{ fontSize: 12, color: '#94a3b8' }}>Registrado por</Text>
               <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{usuario}</Text>
             </View>
-            {variant === 'negocio' && (
-              <TouchableOpacity
-                onPress={openEdit}
-                style={{
-                  marginTop: 4, paddingVertical: 9, borderRadius: 8,
-                  backgroundColor: '#eff6ff', alignItems: 'center',
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563eb' }}>Editar movimiento</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              onPress={openEdit}
+              style={{
+                marginTop: 4, paddingVertical: 9, borderRadius: 8,
+                backgroundColor: '#eff6ff', alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563eb' }}>Editar movimiento</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -423,37 +500,39 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
                     value={editFecha} onChangeText={setEditFecha}
                   />
                 </View>
-                {/* Tipo */}
-                <View>
-                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Tipo</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                    {[...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado'].map((t) => {
-                      const active = editTipo === t;
-                      return (
-                        <TouchableOpacity
-                          key={t}
-                          onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
-                          style={{
-                            paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
-                            borderColor: active ? '#dc2626' : '#e2e8f0',
-                            backgroundColor: active ? '#fee2e2' : '#f8fafc',
-                          }}
-                        >
-                          <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>
-                            {t}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                {/* Tipo — solo negocio */}
+                {variant === 'negocio' && (
+                  <View>
+                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Tipo</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {[...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado'].map((t) => {
+                        const active = editTipo === t;
+                        return (
+                          <TouchableOpacity
+                            key={t}
+                            onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
+                            style={{
+                              paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                              borderColor: active ? '#dc2626' : '#e2e8f0',
+                              backgroundColor: active ? '#fee2e2' : '#f8fafc',
+                            }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>
+                              {t}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    {editTipo === 'Personalizado' && (
+                      <TextInput
+                        style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
+                        placeholder="Nombre del tipo de gasto" placeholderTextColor="#94a3b8"
+                        value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
+                      />
+                    )}
                   </View>
-                  {editTipo === 'Personalizado' && (
-                    <TextInput
-                      style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
-                      placeholder="Nombre del tipo de gasto" placeholderTextColor="#94a3b8"
-                      value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
-                    />
-                  )}
-                </View>
+                )}
                 {/* Observaciones */}
                 <View>
                   <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Observaciones</Text>
@@ -487,36 +566,51 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
-      <Text style={{
-        width: COL.debe, fontSize: fs, textAlign: 'right',
-        color: tx.debe > 0 ? '#ef4444' : '#cbd5e1',
-        fontWeight: tx.debe > 0 ? '600' : '400',
-      }} numberOfLines={1}>
-        {tx.debe > 0 ? '-$ ' + Math.floor(tx.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
-      </Text>
-      <Text style={{
-        width: COL.entrega, fontSize: fs, textAlign: 'right',
-        color: tx.entrega > 0 ? '#22c55e' : '#cbd5e1',
-        fontWeight: tx.entrega > 0 ? '600' : '400',
-      }} numberOfLines={1}>
-        {tx.entrega > 0 ? '+$ ' + Math.floor(tx.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
-      </Text>
-      <Text style={{
-        width: COL.saldo, fontSize: fs, textAlign: 'right', fontWeight: '700',
-        color: tx.saldo_acumulado > 0 ? '#16a34a' : tx.saldo_acumulado < 0 ? '#ef4444' : '#64748b',
-      }} numberOfLines={1}>
-        {formatSaldo(tx.saldo_acumulado)}
-      </Text>
+      <AmountCell
+        value={tx.debe > 0 ? '-$ ' + Math.floor(tx.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+        style={{ width: col.debe }}
+      >
+        <Text style={{
+          fontSize: fs, textAlign: 'right',
+          color: tx.debe > 0 ? '#ef4444' : '#cbd5e1',
+          fontWeight: tx.debe > 0 ? '600' : '400',
+        }} numberOfLines={1}>
+          {tx.debe > 0 ? '-$ ' + Math.floor(tx.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+        </Text>
+      </AmountCell>
+      <AmountCell
+        value={tx.entrega > 0 ? '+$ ' + Math.floor(tx.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+        style={{ width: col.entrega }}
+      >
+        <Text style={{
+          fontSize: fs, textAlign: 'right',
+          color: tx.entrega > 0 ? '#22c55e' : '#cbd5e1',
+          fontWeight: tx.entrega > 0 ? '600' : '400',
+        }} numberOfLines={1}>
+          {tx.entrega > 0 ? '+$ ' + Math.floor(tx.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+        </Text>
+      </AmountCell>
+      <AmountCell
+        value={formatSaldo(tx.saldo_acumulado)}
+        style={{ width: col.saldo }}
+      >
+        <Text style={{
+          fontSize: fs, textAlign: 'right', fontWeight: '700',
+          color: tx.saldo_acumulado > 0 ? '#16a34a' : tx.saldo_acumulado < 0 ? '#ef4444' : '#64748b',
+        }} numberOfLines={1}>
+          {formatSaldo(tx.saldo_acumulado)}
+        </Text>
+      </AmountCell>
       {variant === 'negocio' && (
         <Text style={{
-          width: COL.tipo, fontSize: fs, paddingHorizontal: 4,
+          width: col.tipo, fontSize: fs, paddingHorizontal: 4,
           color: tx.tipo ? '#1e293b' : '#cbd5e1',
           fontWeight: tx.tipo ? '600' : '400',
         }} numberOfLines={1}>
           {tx.tipo ?? '—'}
         </Text>
       )}
-      <Text style={{ flex: 1, fontSize: fs, color: '#94a3b8', paddingLeft: 8 }} numberOfLines={2}>
+      <Text style={{ flex: 1, fontSize: fs, color: '#94a3b8', paddingLeft: 8 }}>
         {tx.observaciones ?? '—'}
       </Text>
       <TouchableOpacity
@@ -526,7 +620,7 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
         onMouseEnter={() => setHoverTrash(true)}
         onMouseLeave={() => setHoverTrash(false)}
         style={{
-          width: COL.trash, height: 22, borderRadius: 6,
+          width: col.trash, height: 22, borderRadius: 6,
           alignItems: 'center', justifyContent: 'center',
           backgroundColor: hoverTrash ? '#fee2e2' : 'transparent',
         }}
@@ -883,6 +977,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
     ? { headerBg: '#fff5f5', borderColor: '#fecaca', btnBg: '#dc2626', btnHover: '#fee2e2' }
     : { headerBg: '#fff',    borderColor: '#e2e8f0', btnBg: '#2563eb', btnHover: '#eff6ff' };
 
+  const col = useColWidths(variant);
   const txsConSaldo = calcularSaldos(transactions);
 
   const ultimoDebe    = transactions.find((t) => t.debe > 0 && !t.anulada);
@@ -1022,15 +1117,15 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               paddingHorizontal: isNarrow ? 8 : 28, paddingVertical: 8,
               borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f1f5f9',
             }}>
-              <Text style={{ width: COL.fecha, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>FECHA</Text>
-              <Text style={{ width: COL.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'SALIDA\nDINERO'}</Text>
-              <Text style={{ width: COL.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'ENTRADA\nDINERO'}</Text>
-              <Text style={{ width: COL.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
+              <Text style={{ width: col.fecha, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>FECHA</Text>
+              <Text style={{ width: col.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'SALIDA\nDINERO'}</Text>
+              <Text style={{ width: col.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'ENTRADA\nDINERO'}</Text>
+              <Text style={{ width: col.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
               {variant === 'negocio' && (
-                <Text style={{ width: COL.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingHorizontal: 4 }}>TIPO</Text>
+                <Text style={{ width: col.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingHorizontal: 4 }}>TIPO</Text>
               )}
               <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingLeft: 8 }}>OBSERVACIONES</Text>
-              <View style={{ width: COL.trash }} />
+              <View style={{ width: col.trash }} />
             </View>
 
             {/* Filas: agrupadas por día solo en negocio, planas en agencia */}
@@ -1082,34 +1177,49 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
                       <Text style={{ width: 14, fontSize: 10, color: '#94a3b8', marginRight: 4 }}>
                         {expandido ? '▼' : '▶'}
                       </Text>
-                      <Text style={{ width: COL.fecha - 18, fontSize: fs, color: '#475569', fontWeight: '600' }} numberOfLines={1}>
+                      <Text style={{ width: col.fecha - 18, fontSize: fs, color: '#475569', fontWeight: '600' }} numberOfLines={1}>
                         {formatFecha(fecha)}
                       </Text>
-                      <Text style={{
-                        width: COL.debe, fontSize: fs, textAlign: 'right',
-                        color: totalDebe > 0 ? '#ef4444' : '#cbd5e1',
-                        fontWeight: totalDebe > 0 ? '600' : '400',
-                      }}>
-                        {totalDebe > 0 ? '-$ ' + Math.floor(totalDebe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
-                      </Text>
-                      <Text style={{
-                        width: COL.entrega, fontSize: fs, textAlign: 'right',
-                        color: totalEntrega > 0 ? '#22c55e' : '#cbd5e1',
-                        fontWeight: totalEntrega > 0 ? '600' : '400',
-                      }}>
-                        {totalEntrega > 0 ? '+$ ' + Math.floor(totalEntrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
-                      </Text>
-                      <Text style={{
-                        width: COL.saldo, fontSize: fs, textAlign: 'right', fontWeight: '700',
-                        color: saldoCierre > 0 ? '#16a34a' : saldoCierre < 0 ? '#ef4444' : '#64748b',
-                      }}>
-                        {formatSaldo(saldoCierre)}
-                      </Text>
-                      <View style={{ width: COL.tipo }} />
+                      <AmountCell
+                        value={totalDebe > 0 ? '-$ ' + Math.floor(totalDebe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+                        style={{ width: col.debe }}
+                      >
+                        <Text style={{
+                          fontSize: fs, textAlign: 'right',
+                          color: totalDebe > 0 ? '#ef4444' : '#cbd5e1',
+                          fontWeight: totalDebe > 0 ? '600' : '400',
+                        }}>
+                          {totalDebe > 0 ? '-$ ' + Math.floor(totalDebe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+                        </Text>
+                      </AmountCell>
+                      <AmountCell
+                        value={totalEntrega > 0 ? '+$ ' + Math.floor(totalEntrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+                        style={{ width: col.entrega }}
+                      >
+                        <Text style={{
+                          fontSize: fs, textAlign: 'right',
+                          color: totalEntrega > 0 ? '#22c55e' : '#cbd5e1',
+                          fontWeight: totalEntrega > 0 ? '600' : '400',
+                        }}>
+                          {totalEntrega > 0 ? '+$ ' + Math.floor(totalEntrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
+                        </Text>
+                      </AmountCell>
+                      <AmountCell
+                        value={formatSaldo(saldoCierre)}
+                        style={{ width: col.saldo }}
+                      >
+                        <Text style={{
+                          fontSize: fs, textAlign: 'right', fontWeight: '700',
+                          color: saldoCierre > 0 ? '#16a34a' : saldoCierre < 0 ? '#ef4444' : '#64748b',
+                        }}>
+                          {formatSaldo(saldoCierre)}
+                        </Text>
+                      </AmountCell>
+                      <View style={{ width: col.tipo }} />
                       <Text style={{ flex: 1, fontSize: fs - 1, color: '#94a3b8', paddingLeft: 8 }}>
                         {count} mov.
                       </Text>
-                      <View style={{ width: COL.trash }} />
+                      <View style={{ width: col.trash }} />
                     </TouchableOpacity>
 
                     {/* Filas individuales expandidas */}
@@ -1140,7 +1250,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
             <Text style={{ fontSize: 17, fontWeight: '700', color: '#1e293b', marginBottom: 16 }}>
               Nuevo movimiento — {client.nombre}
             </Text>
-            <MovimientoForm clientId={client.id} variant={variant} onClose={() => setShowForm(false)} />
+            <MovimientoForm clientId={client.id} variant={variant} currentSaldo={saldo} onClose={() => setShowForm(false)} />
           </View>
         </View>
       </Modal>
