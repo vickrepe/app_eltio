@@ -644,7 +644,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
           </View>
 
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            {!client.es_caja && client.activo && (
+            {!client.es_caja && !client.es_caja_negocio && client.activo && (
               <>
                 <TouchableOpacity
                   onPress={() => setShowEditar(true)}

@@ -146,7 +146,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       .select('*')
       .eq('org_id', organization.id)
       .eq('es_caja', true)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (data) set({ cajaClient: data as Client });
   },
@@ -160,7 +161,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       .select('*')
       .eq('org_id', organization.id)
       .eq('es_caja_negocio', true)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (data) set({ cajaNegoClient: data as Client });
   },
