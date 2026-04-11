@@ -1,7 +1,7 @@
 import { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Client, Organization, Profile, Transaction } from '../types';
+import type { Client, Meta, MetaRegistro, Organization, Profile, Transaction } from '../types';
 
 interface AppState {
   // Auth
@@ -60,6 +60,17 @@ interface AppState {
   inviteUser: (data: { email: string; nombre: string; rol: string }) => Promise<string | null>;
   updateUserRol: (profileId: string, rol: string) => Promise<string | null>;
   removeUser: (profileId: string) => Promise<string | null>;
+
+  // Metas
+  metas:              Meta[];
+  metasLoading:       boolean;
+  metaRegistros:      MetaRegistro[];
+  loadMetas:          () => Promise<void>;
+  createMeta:         (data: { titulo: string; notas: string; puntuacion: number }) => Promise<string | null>;
+  updateMeta:         (metaId: string, data: { titulo: string; notas: string; puntuacion: number }) => Promise<string | null>;
+  archivarMeta:       (metaId: string) => Promise<string | null>;
+  loadMetaRegistros:  (startDate: string, endDate: string) => Promise<void>;
+  toggleMetaRegistro: (metaId: string, fecha: string, cumplida: boolean) => Promise<string | null>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -77,6 +88,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   transactions:        [],
   transactionsLoading: false,
   orgUsers:         [],
+  metas:            [],
+  metasLoading:     false,
+  metaRegistros:    [],
 
   setSession: (session) => {
     set({ session, user: session?.user ?? null, authLoading: false });
@@ -358,6 +372,106 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (error) return error.message;
     await get().loadClients();
+    return null;
+  },
+
+  loadMetas: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    set({ metasLoading: true });
+    const { data } = await supabase
+      .from('metas')
+      .select('*')
+      .eq('org_id', organization.id)
+      .order('created_at');
+    if (data) set({ metas: data as Meta[] });
+    set({ metasLoading: false });
+  },
+
+  createMeta: async ({ titulo, notas, puntuacion }) => {
+    const { organization } = get();
+    if (!organization) return 'Sin organización activa';
+    const { error } = await supabase.from('metas').insert({
+      org_id: organization.id,
+      titulo:     titulo.trim(),
+      notas:      notas.trim() || null,
+      puntuacion,
+    });
+    if (error) return error.message;
+    await get().loadMetas();
+    return null;
+  },
+
+  updateMeta: async (metaId, { titulo, notas, puntuacion }) => {
+    const { error } = await supabase
+      .from('metas')
+      .update({ titulo: titulo.trim(), notas: notas.trim() || null, puntuacion })
+      .eq('id', metaId);
+    if (error) return error.message;
+    await get().loadMetas();
+    return null;
+  },
+
+  archivarMeta: async (metaId) => {
+    const { error } = await supabase
+      .from('metas')
+      .update({ activo: false })
+      .eq('id', metaId);
+    if (error) return error.message;
+    await get().loadMetas();
+    return null;
+  },
+
+  loadMetaRegistros: async (startDate, endDate) => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('meta_registros')
+      .select('*')
+      .eq('org_id', organization.id)
+      .gte('fecha', startDate)
+      .lte('fecha', endDate);
+    if (data) set({ metaRegistros: data as MetaRegistro[] });
+  },
+
+  toggleMetaRegistro: async (metaId, fecha, cumplida) => {
+    const { organization, metaRegistros } = get();
+    if (!organization) return 'Sin organización activa';
+
+    // Optimistic update
+    const existing = metaRegistros.find(r => r.meta_id === metaId && r.fecha === fecha);
+    if (existing) {
+      set({ metaRegistros: metaRegistros.map(r =>
+        r.meta_id === metaId && r.fecha === fecha ? { ...r, cumplida } : r
+      )});
+    } else {
+      const optimistic: MetaRegistro = {
+        id: `temp_${metaId}_${fecha}`,
+        meta_id: metaId,
+        org_id:  organization.id,
+        fecha,
+        cumplida,
+        created_at: new Date().toISOString(),
+      };
+      set({ metaRegistros: [...metaRegistros, optimistic] });
+    }
+
+    const { error } = await supabase.from('meta_registros').upsert(
+      { meta_id: metaId, org_id: organization.id, fecha, cumplida },
+      { onConflict: 'meta_id,fecha' }
+    );
+
+    if (error) {
+      // Revert optimistic update on failure
+      if (existing) {
+        set({ metaRegistros: metaRegistros.map(r =>
+          r.meta_id === metaId && r.fecha === fecha ? existing : r
+        )});
+      } else {
+        set({ metaRegistros: metaRegistros.filter(r => !(r.meta_id === metaId && r.fecha === fecha)) });
+      }
+      return error.message;
+    }
     return null;
   },
 }));

@@ -379,18 +379,30 @@ export default function PerfilScreen() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#f8fafc' }} contentContainerStyle={{ padding: 20 }}>
 
-      {/* Botón saltar a Negocio — solo owner super */}
+      {/* Botones de acceso rápido — solo owner super */}
       {isSuperOwner && (
-        <TouchableOpacity
-          onPress={() => router.replace('/negocio')}
-          style={{
-            backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14,
-            flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 10,
-          }}
-        >
-          <Text style={{ fontSize: 16 }}>↪️</Text>
-          <Text style={{ color: '#16a34a', fontWeight: '600', fontSize: 14 }}>Ir a Negocio</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          <TouchableOpacity
+            onPress={() => router.replace('/negocio')}
+            style={{
+              flex: 1, backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14,
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+            }}
+          >
+            <Text style={{ fontSize: 16 }}>↪️</Text>
+            <Text style={{ color: '#16a34a', fontWeight: '600', fontSize: 14 }}>Ir a Negocio</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => router.push('/metas')}
+            style={{
+              flex: 1, backgroundColor: '#fefce8', borderRadius: 12, padding: 14,
+              flexDirection: 'row', alignItems: 'center', gap: 8,
+            }}
+          >
+            <Text style={{ fontSize: 16 }}>🎯</Text>
+            <Text style={{ color: '#ca8a04', fontWeight: '600', fontSize: 14 }}>Metas</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Card de usuario */}

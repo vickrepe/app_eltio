@@ -70,6 +70,7 @@ export default function RootLayout() {
       <Stack.Screen name="(app)" />
       <Stack.Screen name="negocio" />
       <Stack.Screen name="set-password" />
+      <Stack.Screen name="metas" options={{ headerShown: true, title: 'Metas' }} />
       <Stack.Screen name="cliente/nuevo"    options={{ headerShown: true, title: 'Nuevo cliente', presentation: 'modal' }} />
       <Stack.Screen name="cliente/[id]"     options={{ headerShown: true, title: 'Detalle' }} />
       <Stack.Screen name="cliente/movimiento" options={{ headerShown: true, title: 'Nuevo movimiento', presentation: 'modal' }} />

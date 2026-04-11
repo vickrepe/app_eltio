@@ -60,3 +60,22 @@ export interface NewTransactionForm {
   observaciones: string;
   fecha: string;
 }
+
+export interface Meta {
+  id: string;
+  org_id: string;
+  titulo: string;
+  notas: string | null;
+  puntuacion: number;
+  activo: boolean;
+  created_at: string;
+}
+
+export interface MetaRegistro {
+  id: string;
+  meta_id: string;
+  org_id: string;
+  fecha: string; // YYYY-MM-DD
+  cumplida: boolean;
+  created_at: string;
+}
