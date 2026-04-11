@@ -569,7 +569,7 @@ function EditarClienteModal({ client, onClose }: { client: Client; onClose: () =
 
 // ─── ClienteDetalle ──────────────────────────────────────────
 
-export function ClienteDetalle({ client }: { client: Client }) {
+export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client; variant?: 'agencia' | 'negocio' }) {
   const { transactions, transactionsLoading, archivarCliente } = useAppStore();
   const { width: screenWidth } = useWindowDimensions();
   const isNarrow = screenWidth < 768;
@@ -579,10 +579,23 @@ export function ClienteDetalle({ client }: { client: Client }) {
   const [hoverArchivar, setHoverArchivar] = useState(false);
   const [hoverEditar, setHoverEditar]     = useState(false);
   const [hoverEnviar, setHoverEnviar]     = useState(false);
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  const toggleDate = (fecha: string) => {
+    setExpandedDates(prev => {
+      const next = new Set(prev);
+      next.has(fecha) ? next.delete(fecha) : next.add(fecha);
+      return next;
+    });
+  };
 
   const saldo    = client.saldo ?? 0;
   const esAFavor = saldo < 0;
   const alDia    = saldo === 0;
+
+  const theme = variant === 'negocio'
+    ? { headerBg: '#fff5f5', borderColor: '#fecaca', btnBg: '#dc2626', btnHover: '#fee2e2' }
+    : { headerBg: '#fff',    borderColor: '#e2e8f0', btnBg: '#2563eb', btnHover: '#eff6ff' };
 
   const txsConSaldo = calcularSaldos(transactions);
 
@@ -597,6 +610,15 @@ export function ClienteDetalle({ client }: { client: Client }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+      {/* Banner negocio */}
+      {variant === 'negocio' && (
+        <View style={{ backgroundColor: '#dc2626', paddingVertical: 10, alignItems: 'center' }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Caja Negocio
+          </Text>
+        </View>
+      )}
+
       {/* Modal editar */}
       {showEditar && (
         <EditarClienteModal client={client} onClose={() => setShowEditar(false)} />
@@ -609,8 +631,8 @@ export function ClienteDetalle({ client }: { client: Client }) {
 
       {/* Header */}
       <View style={{
-        backgroundColor: '#fff', paddingHorizontal: 28, paddingVertical: 20,
-        borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+        backgroundColor: theme.headerBg, paddingHorizontal: 28, paddingVertical: 20,
+        borderBottomWidth: 1, borderBottomColor: theme.borderColor,
       }}>
         <View style={{ flexDirection: isNarrow ? 'column' : 'row', justifyContent: 'space-between', gap: 10 }}>
           <View>
@@ -671,7 +693,7 @@ export function ClienteDetalle({ client }: { client: Client }) {
               onPress={() => setShowForm(true)}
               style={{
                 flex: isNarrow ? 1 : undefined,
-                backgroundColor: '#2563eb', paddingHorizontal: 14, paddingVertical: 9,
+                backgroundColor: theme.btnBg, paddingHorizontal: 14, paddingVertical: 9,
                 borderRadius: 9, alignItems: 'center',
               }}
             >
@@ -721,10 +743,94 @@ export function ClienteDetalle({ client }: { client: Client }) {
               <View style={{ width: COL.trash }} />
             </View>
 
-            {/* Filas */}
-            {txsConSaldo.map((tx) => (
+            {/* Filas: agrupadas por día solo en negocio, planas en agencia */}
+            {variant !== 'negocio' && txsConSaldo.map((tx) => (
               <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} />
             ))}
+            {variant === 'negocio' && (() => {
+              const hoy = todayISO();
+              // Agrupar por fecha manteniendo orden descendente
+              const grupos: Record<string, TransactionWithSaldo[]> = {};
+              for (const tx of txsConSaldo) {
+                if (!grupos[tx.fecha]) grupos[tx.fecha] = [];
+                grupos[tx.fecha].push(tx);
+              }
+              const fechas = Object.keys(grupos).sort((a, b) => b.localeCompare(a));
+              const fs = isNarrow ? 11 : 13;
+              const ph = isNarrow ? 8 : 28;
+
+              return fechas.map((fecha) => {
+                const txsDia   = grupos[fecha];
+                const esHoy    = fecha === hoy;
+                const expandido = esHoy || expandedDates.has(fecha);
+
+                if (esHoy) {
+                  return txsDia.map(tx => (
+                    <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} />
+                  ));
+                }
+
+                // Fila resumen del día
+                const totalDebe    = txsDia.reduce((s, t) => s + t.debe, 0);
+                const totalEntrega = txsDia.reduce((s, t) => s + t.entrega, 0);
+                const saldoCierre  = txsDia[0].saldo_acumulado;
+                const count        = txsDia.length;
+
+                return (
+                  <View key={fecha}>
+                    {/* Fila colapsable */}
+                    <TouchableOpacity
+                      onPress={() => toggleDate(fecha)}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        paddingHorizontal: ph, paddingVertical: 9,
+                        backgroundColor: expandido ? '#f8fafc' : '#f1f5f9',
+                        borderBottomWidth: 1, borderBottomColor: '#e2e8f0',
+                      }}
+                    >
+                      <Text style={{ width: 14, fontSize: 10, color: '#94a3b8', marginRight: 4 }}>
+                        {expandido ? '▼' : '▶'}
+                      </Text>
+                      <Text style={{ width: COL.fecha - 18, fontSize: fs, color: '#475569', fontWeight: '600' }} numberOfLines={1}>
+                        {formatFecha(fecha)}
+                      </Text>
+                      <Text style={{
+                        width: COL.debe, fontSize: fs, textAlign: 'right',
+                        color: totalDebe > 0 ? '#ef4444' : '#cbd5e1',
+                        fontWeight: totalDebe > 0 ? '600' : '400',
+                      }}>
+                        {totalDebe > 0 ? formatARS(totalDebe) : '—'}
+                      </Text>
+                      <Text style={{
+                        width: COL.entrega, fontSize: fs, textAlign: 'right',
+                        color: totalEntrega > 0 ? '#22c55e' : '#cbd5e1',
+                        fontWeight: totalEntrega > 0 ? '600' : '400',
+                      }}>
+                        {totalEntrega > 0 ? formatARS(totalEntrega) : '—'}
+                      </Text>
+                      <Text style={{
+                        width: COL.saldo, fontSize: fs, textAlign: 'right', fontWeight: '700',
+                        color: saldoCierre > 0 ? '#ef4444' : saldoCierre < 0 ? '#2563eb' : '#64748b',
+                      }}>
+                        {formatARS(saldoCierre)}
+                      </Text>
+                      <Text style={{ flex: 1, fontSize: fs - 1, color: '#94a3b8', paddingLeft: 8 }}>
+                        {count} mov.
+                      </Text>
+                      <View style={{ width: COL.trash }} />
+                    </TouchableOpacity>
+
+                    {/* Filas individuales expandidas */}
+                    {expandido && txsDia.map(tx => (
+                      <View key={tx.id} style={{ backgroundColor: '#fafafa', borderLeftWidth: 3, borderLeftColor: '#e2e8f0' }}>
+                        <FilaTransaccion tx={tx} clientId={client.id} />
+                      </View>
+                    ))}
+                  </View>
+                );
+              });
+            })()}
           </View>
         )}
       </ScrollView>

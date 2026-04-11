@@ -12,13 +12,13 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 const NEGOCIO_ROLES = ['owner_negocio', 'empleado_negocio'];
 
-export default function AppLayout() {
+export default function NegocioLayout() {
   const { profile } = useAppStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (profile && NEGOCIO_ROLES.includes(profile.rol)) {
-      router.replace('/negocio');
+    if (profile && !NEGOCIO_ROLES.includes(profile.rol) && profile.rol !== 'owner') {
+      router.replace('/(app)');
     }
   }, [profile]);
 
@@ -38,13 +38,6 @@ export default function AppLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: 'Clientes',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="👥" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="caja"
         options={{
           title: 'Caja',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏧" focused={focused} />,

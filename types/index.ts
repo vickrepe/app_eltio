@@ -1,4 +1,4 @@
-export type UserRole = 'owner' | 'employee';
+export type UserRole = 'owner' | 'owner_agencia' | 'employee' | 'owner_negocio' | 'empleado_negocio';
 
 export interface Organization {
   id: string;
@@ -24,6 +24,7 @@ export interface Client {
   notas: string | null;
   activo: boolean;
   es_caja: boolean;
+  es_caja_negocio: boolean;
   created_at: string;
   saldo?: number; // calculado: sum(debe) - sum(entrega). positivo = debe, negativo = a favor
 }

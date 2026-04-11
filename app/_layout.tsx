@@ -9,12 +9,13 @@ import { useAppStore } from '../lib/store';
 
 SplashScreen.preventAutoHideAsync();
 
+const NEGOCIO_ROLES = ['owner_negocio', 'empleado_negocio'];
+
 export default function RootLayout() {
-  const { session, setSession, loadProfile, authLoading } = useAppStore();
+  const { session, profile, setSession, loadProfile, authLoading } = useAppStore();
   const router = useRouter();
   const segments = useSegments();
 
-  // Escuchar cambios de sesión de Supabase
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -27,62 +28,51 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Cargar perfil cuando hay sesión
   useEffect(() => {
-    if (session) {
-      loadProfile();
-    }
+    if (session) loadProfile();
   }, [session]);
 
-  // Redirigir según estado de auth
   useEffect(() => {
     if (authLoading) return;
 
-    const inAuthGroup    = segments[0] === '(auth)';
-    const inSetPassword  = segments[0] === 'set-password';
+    const inAuthGroup   = segments[0] === '(auth)';
+    const inSetPassword = segments[0] === 'set-password';
+    const inNegocio     = segments[0] === 'negocio';
+    const inApp         = segments[0] === '(app)';
 
     if (!session && !inAuthGroup && !inSetPassword) {
       router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
-      router.replace('/(app)');
+      return;
     }
-  }, [session, authLoading, segments]);
 
-  // Ocultar splash cuando ya sabemos el estado de auth
-  useEffect(() => {
-    if (!authLoading) {
-      SplashScreen.hideAsync();
+    // Al volver del login, esperar a que cargue el perfil para saber a dónde redirigir
+    if (session && inAuthGroup) {
+      if (!profile) return;
+      router.replace(NEGOCIO_ROLES.includes(profile.rol) ? '/negocio' : '/(app)');
+      return;
     }
+
+    // Enforcer de fronteras cuando el perfil ya está cargado
+    if (session && profile && profile.rol !== 'owner') {
+      const isNegocioRole = NEGOCIO_ROLES.includes(profile.rol);
+      if (isNegocioRole && inApp)     router.replace('/negocio');
+      if (!isNegocioRole && inNegocio) router.replace('/(app)');
+    }
+  }, [session, authLoading, profile, segments]);
+
+  useEffect(() => {
+    if (!authLoading) SplashScreen.hideAsync();
   }, [authLoading]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(app)" />
-      <Stack.Screen name="set-password" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="cliente/nuevo"
-        options={{
-          headerShown: true,
-          title: 'Nuevo cliente',
-          presentation: 'modal',
-        }}
-      />
-      <Stack.Screen
-        name="cliente/[id]"
-        options={{
-          headerShown: true,
-          title: 'Detalle',
-        }}
-      />
-      <Stack.Screen
-        name="cliente/movimiento"
-        options={{
-          headerShown: true,
-          title: 'Nuevo movimiento',
-          presentation: 'modal',
-        }}
-      />
+      <Stack.Screen name="negocio" />
+      <Stack.Screen name="set-password" />
+      <Stack.Screen name="cliente/nuevo"    options={{ headerShown: true, title: 'Nuevo cliente', presentation: 'modal' }} />
+      <Stack.Screen name="cliente/[id]"     options={{ headerShown: true, title: 'Detalle' }} />
+      <Stack.Screen name="cliente/movimiento" options={{ headerShown: true, title: 'Nuevo movimiento', presentation: 'modal' }} />
     </Stack>
   );
 }

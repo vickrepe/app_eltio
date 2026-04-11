@@ -16,6 +16,7 @@ interface AppState {
   clientsLoading:   boolean;
   selectedClientId: string | null;
   cajaClient:       Client | null;
+  cajaNegoClient:   Client | null;
   archivedClients:  Client[];
 
   // Transacciones del cliente seleccionado
@@ -31,6 +32,7 @@ interface AppState {
   // Acciones de clientes
   loadClients: () => Promise<void>;
   loadCaja: () => Promise<void>;
+  loadCajaNego: () => Promise<void>;
   selectClient: (clientId: string | null) => void;
   createClient: (data: { nombre: string; telefono: string; notas: string }) => Promise<string | null>;
 
@@ -70,6 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clientsLoading:   false,
   selectedClientId: null,
   cajaClient:       null,
+  cajaNegoClient:   null,
   archivedClients:  [],
   transactions:        [],
   transactionsLoading: false,
@@ -112,6 +115,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       session: null, user: null, profile: null,
       organization: null, clients: [], selectedClientId: null,
+      cajaClient: null, cajaNegoClient: null,
     });
   },
 
@@ -126,6 +130,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       .eq('org_id', organization.id)
       .eq('activo', true)
       .eq('es_caja', false)
+      .eq('es_caja_negocio', false)
       .order('nombre');
 
     if (!error && data) set({ clients: data as Client[] });
@@ -144,6 +149,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       .single();
 
     if (data) set({ cajaClient: data as Client });
+  },
+
+  loadCajaNego: async () => {
+    const { organization } = get();
+    if (!organization) return;
+
+    const { data } = await supabase
+      .from('clients_with_balance')
+      .select('*')
+      .eq('org_id', organization.id)
+      .eq('es_caja_negocio', true)
+      .single();
+
+    if (data) set({ cajaNegoClient: data as Client });
   },
 
   selectClient: (clientId) => {
@@ -204,9 +223,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
 
     if (error) return error.message;
-    const isCaja = get().cajaClient?.id === client_id;
+    const isCaja     = get().cajaClient?.id === client_id;
+    const isCajaNego = get().cajaNegoClient?.id === client_id;
     await Promise.all([
-      isCaja ? get().loadCaja() : get().loadClients(),
+      isCaja ? get().loadCaja() : isCajaNego ? get().loadCajaNego() : get().loadClients(),
       get().loadTransactions(client_id),
     ]);
     return null;
@@ -219,9 +239,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       .eq('id', transactionId);
 
     if (error) return error.message;
-    const isCaja = get().cajaClient?.id === clientId;
+    const isCaja     = get().cajaClient?.id === clientId;
+    const isCajaNego = get().cajaNegoClient?.id === clientId;
     await Promise.all([
-      isCaja ? get().loadCaja() : get().loadClients(),
+      isCaja ? get().loadCaja() : isCajaNego ? get().loadCajaNego() : get().loadClients(),
       get().loadTransactions(clientId),
     ]);
     return null;

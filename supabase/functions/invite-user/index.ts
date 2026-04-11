@@ -36,8 +36,22 @@ Deno.serve(async (req: Request) => {
       .eq('user_id', user.id)
       .single();
 
-    if (!callerProfile || callerProfile.rol !== 'owner') {
-      return new Response(JSON.stringify({ error: 'Solo los dueños pueden invitar usuarios' }), {
+    const ALLOWED_INVITERS = ['owner', 'owner_agencia', 'owner_negocio'];
+    const ALLOWED_ROLES: Record<string, string[]> = {
+      owner:         ['owner', 'owner_agencia', 'employee', 'owner_negocio', 'empleado_negocio'],
+      owner_agencia: ['owner_agencia', 'employee'],
+      owner_negocio: ['owner_negocio', 'empleado_negocio'],
+    };
+
+    if (!callerProfile || !ALLOWED_INVITERS.includes(callerProfile.rol)) {
+      return new Response(JSON.stringify({ error: 'No tenés permisos para invitar usuarios' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const rolesPermitidos = ALLOWED_ROLES[callerProfile.rol] ?? [];
+    if (!rolesPermitidos.includes(rol)) {
+      return new Response(JSON.stringify({ error: `No podés invitar usuarios con el rol "${rol}"` }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
