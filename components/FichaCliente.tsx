@@ -406,8 +406,8 @@ function MovimientoForm({
 function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; clientId: string; variant?: string }) {
   const { cancelarTransaccion, updateTransaction, negocioTipos, loadNegocioTipos } = useAppStore();
   const [hoverTrash, setHoverTrash] = useState(false);
-  const [showInfo, setShowInfo]     = useState(false);
-  const [showEdit, setShowEdit]     = useState(false);
+  // 'none' | 'info' | 'edit' — single modal, two views
+  const [modalMode, setModalMode]   = useState<'none' | 'info' | 'edit'>('none');
   const [loading, setLoading]       = useState(false);
 
   // Edit form state
@@ -424,21 +424,16 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
     setEditEntrega(tx.entrega > 0 ? String(tx.entrega) : '');
     setEditObs(tx.observaciones ?? '');
     setEditFecha(tx.fecha);
-    // Determine if tipo is custom
     const tipoFijo = TIPOS_FIJOS.includes(tx.tipo ?? '');
     const tipoCustomGuardado = negocioTipos.some(t => t.nombre === tx.tipo);
     if (!tx.tipo) {
-      setEditTipo('');
-      setEditCustom('');
+      setEditTipo(''); setEditCustom('');
     } else if (tipoFijo || tipoCustomGuardado) {
-      setEditTipo(tx.tipo ?? '');
-      setEditCustom('');
+      setEditTipo(tx.tipo ?? ''); setEditCustom('');
     } else {
-      setEditTipo('Personalizado');
-      setEditCustom(tx.tipo ?? '');
+      setEditTipo('Personalizado'); setEditCustom(tx.tipo ?? '');
     }
-    setShowInfo(false);
-    setShowEdit(true);
+    setModalMode('edit');
   };
 
   const handleSaveEdit = async () => {
@@ -456,7 +451,7 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
     });
     setEditSaving(false);
     if (err) { Alert.alert('Error', err); return; }
-    setShowEdit(false);
+    setModalMode('none');
   };
 
   useEffect(() => {
@@ -485,9 +480,9 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
       paddingHorizontal: ph, paddingVertical: 9,
       borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
     }}>
-      {/* FECHA — clicable, abre modal con hora y usuario */}
+      {/* FECHA — clicable */}
       <TouchableOpacity
-        onPress={() => setShowInfo(true)}
+        onPress={() => setModalMode('info')}
         style={{ width: col.fecha }}
         activeOpacity={0.7}
       >
@@ -499,158 +494,151 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
         </Text>
       </TouchableOpacity>
 
-      {/* Modal de info */}
-      <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 40 }}
-          activeOpacity={1}
-          onPress={() => setShowInfo(false)}
-        >
-          <View style={{
-            backgroundColor: '#fff', borderRadius: 14, padding: 20,
-            width: 240, gap: 10,
-            shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12,
-          }}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b' }}>
-              Detalle del movimiento
-            </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 12, color: '#94a3b8' }}>Fecha</Text>
-              <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{formatFecha(tx.fecha)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 12, color: '#94a3b8' }}>Hora</Text>
-              <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{hora}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 12, color: '#94a3b8' }}>Registrado por</Text>
-              <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{usuario}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={openEdit}
-              style={{
-                marginTop: 4, paddingVertical: 9, borderRadius: 8,
-                backgroundColor: '#eff6ff', alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563eb' }}>Editar movimiento</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Edit modal */}
-      <Modal visible={showEdit} transparent animationType="slide" onRequestClose={() => setShowEdit(false)}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+      {/* Modal único: info o edición */}
+      <Modal
+        visible={modalMode !== 'none'}
+        transparent
+        animationType={modalMode === 'edit' ? 'slide' : 'fade'}
+        onRequestClose={() => setModalMode('none')}
+      >
+        {modalMode === 'info' ? (
+          /* ── Vista info ── */
           <TouchableOpacity
-            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 40 }}
             activeOpacity={1}
-            onPress={() => setShowEdit(false)}
+            onPress={() => setModalMode('none')}
           >
-            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-              <ScrollView
-                style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18 }}
-                contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 36 }}
-                keyboardShouldPersistTaps="handled"
+            <View style={{
+              backgroundColor: '#fff', borderRadius: 14, padding: 20,
+              width: 260, gap: 10,
+              shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12,
+            }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#1e293b' }}>
+                Detalle del movimiento
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, color: '#94a3b8' }}>Fecha</Text>
+                <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{formatFecha(tx.fecha)}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, color: '#94a3b8' }}>Hora</Text>
+                <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{hora}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, color: '#94a3b8' }}>Registrado por</Text>
+                <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{usuario}</Text>
+              </View>
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation?.(); openEdit(); }}
+                style={{ marginTop: 4, paddingVertical: 10, borderRadius: 8, backgroundColor: '#eff6ff', alignItems: 'center' }}
               >
-                <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 4 }}>
-                  Editar movimiento
-                </Text>
-                {/* Salida / Entrada */}
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Salida ($)</Text>
-                    <TextInput
-                      style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
-                      placeholder="0" placeholderTextColor="#94a3b8"
-                      value={editDebe} onChangeText={setEditDebe} keyboardType="decimal-pad"
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Entrada ($)</Text>
-                    <TextInput
-                      style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
-                      placeholder="0" placeholderTextColor="#94a3b8"
-                      value={editEntrega} onChangeText={setEditEntrega} keyboardType="decimal-pad"
-                    />
-                  </View>
-                </View>
-                {/* Fecha */}
-                <DateField
-                  label="Fecha"
-                  value={editFecha}
-                  onChange={setEditFecha}
-                  inputStyle={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
-                  labelStyle={{ fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 }}
-                />
-                {/* Tipo — solo negocio */}
-                {variant === 'negocio' && (
-                  <View>
-                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Tipo</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                      {[...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado'].map((t) => {
-                        const active = editTipo === t;
-                        return (
-                          <TouchableOpacity
-                            key={t}
-                            onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
-                            style={{
-                              paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
-                              borderColor: active ? '#dc2626' : '#e2e8f0',
-                              backgroundColor: active ? '#fee2e2' : '#f8fafc',
-                            }}
-                          >
-                            <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>
-                              {t}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                    {editTipo === 'Personalizado' && (
-                      <TextInput
-                        style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
-                        placeholder="Nombre del tipo de gasto" placeholderTextColor="#94a3b8"
-                        value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
-                      />
-                    )}
-                  </View>
-                )}
-                {/* Observaciones */}
-                <View>
-                  <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Observaciones</Text>
-                  <TextInput
-                    style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b', minHeight: 60 }}
-                    placeholder="Ej: pagó con tarjeta..." placeholderTextColor="#94a3b8"
-                    value={editObs} onChangeText={setEditObs} multiline textAlignVertical="top"
-                  />
-                </View>
-                {/* Buttons */}
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-                  <TouchableOpacity
-                    onPress={() => setShowEdit(false)}
-                    style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center' }}
-                  >
-                    <Text style={{ color: '#64748b', fontWeight: '600' }}>Cancelar</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleSaveEdit}
-                    disabled={editSaving}
-                    style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: '#2563eb', alignItems: 'center' }}
-                  >
-                    {editSaving
-                      ? <ActivityIndicator color="#fff" />
-                      : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar cambios</Text>
-                    }
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            </TouchableOpacity>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563eb' }}>Editar movimiento</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
-        </KeyboardAvoidingView>
+        ) : (
+          /* ── Vista edición ── */
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+              activeOpacity={1}
+              onPress={() => setModalMode('none')}
+            >
+              <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+                <ScrollView
+                  style={{ backgroundColor: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18 }}
+                  contentContainerStyle={{ padding: 20, gap: 12, paddingBottom: 36 }}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 4 }}>
+                    Editar movimiento
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Salida ($)</Text>
+                      <TextInput
+                        style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
+                        placeholder="0" placeholderTextColor="#94a3b8"
+                        value={editDebe} onChangeText={setEditDebe} keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Entrada ($)</Text>
+                      <TextInput
+                        style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b' }}
+                        placeholder="0" placeholderTextColor="#94a3b8"
+                        value={editEntrega} onChangeText={setEditEntrega} keyboardType="decimal-pad"
+                      />
+                    </View>
+                  </View>
+                  <DateField
+                    label="Fecha"
+                    value={editFecha}
+                    onChange={setEditFecha}
+                    inputStyle={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
+                    labelStyle={{ fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 }}
+                  />
+                  {variant === 'negocio' && (
+                    <View>
+                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Tipo</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {[...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado'].map((t) => {
+                          const active = editTipo === t;
+                          return (
+                            <TouchableOpacity
+                              key={t}
+                              onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
+                              style={{
+                                paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                                borderColor: active ? '#dc2626' : '#e2e8f0',
+                                backgroundColor: active ? '#fee2e2' : '#f8fafc',
+                              }}
+                            >
+                              <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>{t}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      {editTipo === 'Personalizado' && (
+                        <TextInput
+                          style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
+                          placeholder="Nombre del tipo de gasto" placeholderTextColor="#94a3b8"
+                          value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
+                        />
+                      )}
+                    </View>
+                  )}
+                  <View>
+                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Observaciones</Text>
+                    <TextInput
+                      style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 15, color: '#1e293b', minHeight: 60 }}
+                      placeholder="Ej: pagó con tarjeta..." placeholderTextColor="#94a3b8"
+                      value={editObs} onChangeText={setEditObs} multiline textAlignVertical="top"
+                    />
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                    <TouchableOpacity
+                      onPress={() => setModalMode('none')}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#64748b', fontWeight: '600' }}>Cancelar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSaveEdit}
+                      disabled={editSaving}
+                      style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: '#2563eb', alignItems: 'center' }}
+                    >
+                      {editSaving
+                        ? <ActivityIndicator color="#fff" />
+                        : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar cambios</Text>
+                      }
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        )}
       </Modal>
       <AmountCell
         value={tx.debe > 0 ? '-$ ' + Math.floor(tx.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
