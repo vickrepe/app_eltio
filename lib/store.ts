@@ -265,7 +265,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateTransaction: async (transactionId, clientId, { debe, entrega, observaciones, fecha, tipo }) => {
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from('transactions')
       .update({
         debe,
@@ -274,8 +274,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         fecha,
         tipo: tipo?.trim() || null,
       })
-      .eq('id', transactionId);
+      .eq('id', transactionId)
+      .select('id, debe, entrega');
     if (error) return error.message;
+    if (!updated || updated.length === 0) return 'Sin permiso para editar (RLS).';
     const isCaja     = get().cajaClient?.id === clientId;
     const isCajaNego = get().cajaNegoClient?.id === clientId;
     await Promise.all([

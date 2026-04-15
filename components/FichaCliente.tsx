@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, Modal,
+  View, Text, ScrollView, TouchableOpacity, Pressable, Modal,
   ActivityIndicator, Platform, Alert, KeyboardAvoidingView,
   TextInput, useWindowDimensions, Linking,
 } from 'react-native';
@@ -35,24 +35,29 @@ export function calcularSaldos(txs: Transaction[]): TransactionWithSaldo[] {
   }).reverse();
 }
 
+const MIN_TABLE_WIDTH = 539;
+const OBS_WIDTH       = 90;
+
 function useColWidths(variant?: string) {
   const { width: sw } = useWindowDimensions();
   const isNegocio = variant === 'negocio';
-  const ph = sw < 768 ? 8 : 28;
-  const available = sw - ph * 2;
-  const trash = 30;
+  const ph        = sw < 768 ? 8 : 28;
+  const trash     = 30;
+  // Ancho efectivo de la tabla: mínimo 539, o el ancho real de pantalla
+  const tableWidth = Math.max(sw, MIN_TABLE_WIDTH);
+  // Espacio disponible para las columnas principales (sin obs ni trash ni padding)
+  const available = tableWidth - ph * 2 - OBS_WIDTH - trash;
+  // Proporciones base
   const base = { fecha: 80, debe: 72, entrega: 72, saldo: 72, tipo: 88 };
-  const fixedSum = base.fecha + base.debe + base.entrega + base.saldo
-    + (isNegocio ? base.tipo : 0) + trash;
-  const minObs = 44;
-  if (available >= fixedSum + minObs) return { ...base, trash };
-  const scale = Math.max(0.55, (available - minObs - trash) / (fixedSum - trash));
+  const total = base.fecha + base.debe + base.entrega + base.saldo
+    + (isNegocio ? base.tipo : 0);
   return {
-    fecha:   Math.round(base.fecha   * scale),
-    debe:    Math.round(base.debe    * scale),
-    entrega: Math.round(base.entrega * scale),
-    saldo:   Math.round(base.saldo   * scale),
-    tipo:    Math.round(base.tipo    * scale),
+    fecha:   Math.round(available * base.fecha   / total),
+    debe:    Math.round(available * base.debe    / total),
+    entrega: Math.round(available * base.entrega / total),
+    saldo:   Math.round(available * base.saldo   / total),
+    tipo:    Math.round(available * base.tipo    / total),
+    obs:     OBS_WIDTH,
     trash,
   };
 }
@@ -494,19 +499,22 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
         </Text>
       </TouchableOpacity>
 
-      {/* Modal único: info o edición */}
+      {/* Modal único: info o edición — solo se monta cuando hace falta */}
+      {modalMode !== 'none' && (
       <Modal
-        visible={modalMode !== 'none'}
+        visible
         transparent
         animationType={modalMode === 'edit' ? 'slide' : 'fade'}
         onRequestClose={() => setModalMode('none')}
       >
         {modalMode === 'info' ? (
           /* ── Vista info ── */
-          <TouchableOpacity
+          <Pressable
             style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', padding: 40 }}
-            activeOpacity={1}
-            onPress={() => setModalMode('none')}
+            onPress={(e) => {
+              // @ts-ignore — solo cierra si el click fue sobre el backdrop, no sobre un hijo
+              if (e.target === e.currentTarget) setModalMode('none');
+            }}
           >
             <View style={{
               backgroundColor: '#fff', borderRadius: 14, padding: 20,
@@ -529,13 +537,13 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
                 <Text style={{ fontSize: 12, color: '#1e293b', fontWeight: '500' }}>{usuario}</Text>
               </View>
               <TouchableOpacity
-                onPress={(e) => { e.stopPropagation?.(); openEdit(); }}
+                onPress={() => openEdit()}
                 style={{ marginTop: 4, paddingVertical: 10, borderRadius: 8, backgroundColor: '#eff6ff', alignItems: 'center' }}
               >
                 <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563eb' }}>Editar movimiento</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </Pressable>
         ) : (
           /* ── Vista edición ── */
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -640,6 +648,7 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
           </KeyboardAvoidingView>
         )}
       </Modal>
+      )}
       <AmountCell
         value={tx.debe > 0 ? '-$ ' + Math.floor(tx.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'}
         style={{ width: col.debe }}
@@ -676,15 +685,22 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
         </Text>
       </AmountCell>
       {variant === 'negocio' && (
-        <Text style={{
-          width: col.tipo, fontSize: fs, paddingHorizontal: 4,
-          color: tx.tipo ? '#1e293b' : '#cbd5e1',
-          fontWeight: tx.tipo ? '600' : '400',
-        }} numberOfLines={1}>
-          {tx.tipo ?? '—'}
-        </Text>
+        <TouchableOpacity
+          onPress={() => setModalMode('info')}
+          style={{ width: col.tipo, paddingHorizontal: 4 }}
+          activeOpacity={0.7}
+        >
+          <Text style={{
+            fontSize: fs,
+            color: tx.tipo ? '#2563eb' : '#cbd5e1',
+            fontWeight: tx.tipo ? '600' : '400',
+            textDecorationLine: tx.tipo ? 'underline' : 'none',
+          }} numberOfLines={1}>
+            {tx.tipo ?? '—'}
+          </Text>
+        </TouchableOpacity>
       )}
-      <Text style={{ flex: 1, fontSize: fs, color: '#94a3b8', paddingLeft: 8 }}>
+      <Text style={{ width: col.obs, fontSize: fs, color: '#94a3b8', paddingLeft: 8, flexWrap: 'wrap' }}>
         {tx.observaciones ?? '—'}
       </Text>
       <TouchableOpacity
@@ -1065,14 +1081,6 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
-      {/* Banner negocio */}
-      {variant === 'negocio' && (
-        <View style={{ backgroundColor: '#dc2626', paddingVertical: 10, alignItems: 'center' }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13, letterSpacing: 1.5, textTransform: 'uppercase' }}>
-            Caja Negocio
-          </Text>
-        </View>
-      )}
 
       {/* Modal editar */}
       {showEditar && (
@@ -1165,15 +1173,18 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
             color={alDia ? '#64748b' : saldo > 0 ? '#16a34a' : '#ef4444'}
             bold
           />
-          <KPI label="Última salida"
-            value={ultimoDebe ? '-$ ' + Math.floor(ultimoDebe.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'} color="#ef4444" />
-          <KPI label="Última entrada"
-            value={ultimaEntrega ? '+$ ' + Math.floor(ultimaEntrega.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'} color="#16a34a" />
+          {variant !== 'negocio' && <>
+            <KPI label="Última salida"
+              value={ultimoDebe ? '-$ ' + Math.floor(ultimoDebe.debe).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'} color="#ef4444" />
+            <KPI label="Última entrada"
+              value={ultimaEntrega ? '+$ ' + Math.floor(ultimaEntrega.entrega).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '—'} color="#16a34a" />
+          </>}
         </View>
       </View>
 
       {/* Tabla */}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: MIN_TABLE_WIDTH }}>
         {transactionsLoading ? (
           <View style={{ padding: 40, alignItems: 'center' }}>
             <ActivityIndicator color="#2563eb" />
@@ -1184,7 +1195,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
             <Text style={{ color: '#94a3b8' }}>Sin movimientos todavía</Text>
           </View>
         ) : (
-          <View>
+          <View style={{ minWidth: MIN_TABLE_WIDTH }}>
             {/* Encabezado */}
             <View style={{
               flexDirection: 'row', alignItems: 'center',
@@ -1196,9 +1207,9 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               <Text style={{ width: col.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'ENTRADA\nDINERO'}</Text>
               <Text style={{ width: col.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
               {variant === 'negocio' && (
-                <Text style={{ width: col.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingHorizontal: 4 }}>TIPO</Text>
+                <Text style={{ width: col.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>TIPO</Text>
               )}
-              <Text style={{ flex: 1, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingLeft: 8 }}>OBSERVACIONES</Text>
+              <Text style={{ width: col.obs, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingLeft: 4 }}>OBSERVACIONES</Text>
               <View style={{ width: col.trash }} />
             </View>
 
@@ -1290,7 +1301,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
                         </Text>
                       </AmountCell>
                       <View style={{ width: col.tipo }} />
-                      <Text style={{ flex: 1, fontSize: fs - 1, color: '#94a3b8', paddingLeft: 8 }}>
+                      <Text style={{ width: col.obs, fontSize: fs - 1, color: '#94a3b8', paddingLeft: 8 }}>
                         {count} mov.
                       </Text>
                       <View style={{ width: col.trash }} />
@@ -1308,6 +1319,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
             })()}
           </View>
         )}
+        </ScrollView>
       </ScrollView>
 
       {/* Modal nuevo movimiento */}
