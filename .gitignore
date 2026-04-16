@@ -40,3 +40,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Supabase archivos sensibles y temporales
+supabase/.temp/
+supabase/migration_odoo_cron.sql
