@@ -96,3 +96,12 @@ export interface MetaRegistro {
   cumplida: boolean;
   created_at: string;
 }
+
+export interface MetaFutura {
+  id: string;
+  org_id: string;
+  titulo: string;
+  notas: string | null;
+  lograda: boolean;
+  created_at: string;
+}

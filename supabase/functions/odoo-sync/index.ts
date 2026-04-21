@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
     const creadoPor = ownerProfile.id;
 
     // ── 4. Idempotencia: verificar si ya se sincronizó hoy ─────────────────
-    const TIPOS_VENTAS  = ['Ventas efectivo', 'Ventas tarjeta'];
+    const TIPOS_VENTAS  = ['Ventas efectivo', 'Ventas tarjeta', 'Descuento por pago en efectivo'];
     const { data: existentes } = await supabase
       .from('transactions')
       .select('tipo')
@@ -220,6 +220,20 @@ Deno.serve(async (req: Request) => {
       });
       if (error) throw new Error(`Error insertando ${tipoTx}: ${error.message}`);
       insertados.push(`${tipoTx}: $${monto}`);
+
+      // Descuento 9% sobre ventas en efectivo
+      if (tipoTx === 'Ventas efectivo' && ventasPendientes.includes('Descuento por pago en efectivo')) {
+        const descuento = Math.round(monto * 0.09 * 100) / 100;
+        const { error: descError } = await supabase.from('transactions').insert({
+          client_id: clientId, org_id: orgId,
+          debe: descuento, entrega: 0,
+          fecha: today, tipo: 'Descuento por pago en efectivo',
+          observaciones: `Descuento 9% sobre ventas en efectivo ($${monto})`,
+          creado_por: creadoPor,
+        });
+        if (descError) throw new Error(`Error insertando descuento: ${descError.message}`);
+        insertados.push(`Descuento por pago en efectivo: $${descuento}`);
+      }
     }
 
     // ── 7. Fiados y pagos de fiados (una fila por línea) ────────────────────

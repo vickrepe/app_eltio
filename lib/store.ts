@@ -1,7 +1,7 @@
 import { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Client, Meta, MetaRegistro, MetasConfig, NegocioTipo, Organization, Profile, Transaction } from '../types';
+import type { Client, Meta, MetaFutura, MetaRegistro, MetasConfig, NegocioTipo, Organization, Profile, Transaction } from '../types';
 
 interface AppState {
   // Auth
@@ -84,6 +84,15 @@ interface AppState {
   toggleMetaRegistro: (metaId: string, fecha: string, cumplida: boolean) => Promise<string | null>;
   loadMetasConfig:    () => Promise<void>;
   saveMetasConfig:    (data: { puntos_iniciales: number; nombre_objetivo: string; puntos_objetivo: number | null }) => Promise<string | null>;
+
+  // Metas Futuras
+  metasFuturas:          MetaFutura[];
+  metasFuturasLoading:   boolean;
+  loadMetasFuturas:      () => Promise<void>;
+  createMetaFutura:      (data: { titulo: string; notas: string }) => Promise<string | null>;
+  updateMetaFutura:      (id: string, data: { titulo: string; notas: string }) => Promise<string | null>;
+  toggleMetaFuturaLograda: (id: string, lograda: boolean) => Promise<string | null>;
+  eliminarMetaFutura:    (id: string) => Promise<string | null>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -106,6 +115,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   metasLoading:     false,
   metaRegistros:    [],
   metasConfig:      null,
+  metasFuturas:        [],
+  metasFuturasLoading: false,
 
   setSession: (session) => {
     set({ session, user: session?.user ?? null, authLoading: false });
@@ -532,6 +543,63 @@ export const useAppStore = create<AppState>((set, get) => ({
     );
     if (error) return error.message;
     await get().loadMetasConfig();
+    return null;
+  },
+
+  loadMetasFuturas: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    set({ metasFuturasLoading: true });
+    const { data } = await supabase
+      .from('metas_futuras')
+      .select('*')
+      .eq('org_id', organization.id)
+      .order('created_at', { ascending: false });
+    if (data) set({ metasFuturas: data as MetaFutura[] });
+    set({ metasFuturasLoading: false });
+  },
+
+  createMetaFutura: async ({ titulo, notas }) => {
+    const { organization } = get();
+    if (!organization) return 'Sin organización activa';
+    const { error } = await supabase.from('metas_futuras').insert({
+      org_id: organization.id,
+      titulo: titulo.trim(),
+      notas:  notas.trim() || null,
+    });
+    if (error) return error.message;
+    await get().loadMetasFuturas();
+    return null;
+  },
+
+  updateMetaFutura: async (id, { titulo, notas }) => {
+    const { error } = await supabase
+      .from('metas_futuras')
+      .update({ titulo: titulo.trim(), notas: notas.trim() || null })
+      .eq('id', id);
+    if (error) return error.message;
+    await get().loadMetasFuturas();
+    return null;
+  },
+
+  toggleMetaFuturaLograda: async (id, lograda) => {
+    const { metasFuturas } = get();
+    set({ metasFuturas: metasFuturas.map(m => m.id === id ? { ...m, lograda } : m) });
+    const { error } = await supabase
+      .from('metas_futuras')
+      .update({ lograda })
+      .eq('id', id);
+    if (error) {
+      set({ metasFuturas: metasFuturas });
+      return error.message;
+    }
+    return null;
+  },
+
+  eliminarMetaFutura: async (id) => {
+    const { error } = await supabase.from('metas_futuras').delete().eq('id', id);
+    if (error) return error.message;
+    await get().loadMetasFuturas();
     return null;
   },
 

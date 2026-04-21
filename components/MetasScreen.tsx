@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Platform, Alert,
 } from 'react-native';
 import { useAppStore } from '../lib/store';
-import type { Meta, MetaRegistro } from '../types';
+import type { Meta, MetaFutura, MetaRegistro } from '../types';
 
 // ── helpers ───────────────────────────────────────────────────
 
@@ -129,6 +129,9 @@ export default function MetasScreen() {
     loadMetas, createMeta, updateMeta, archivarMeta,
     loadMetaRegistros, loadAllMetaRegistros, toggleMetaRegistro,
     loadMetasConfig, saveMetasConfig,
+    metasFuturas, metasFuturasLoading,
+    loadMetasFuturas, createMetaFutura, updateMetaFutura,
+    toggleMetaFuturaLograda, eliminarMetaFutura,
   } = useAppStore();
 
   const today     = todayStr();
@@ -139,6 +142,15 @@ export default function MetasScreen() {
   const [showGestionar, setShowGestionar] = useState(false);
   const [editingMeta, setEditingMeta]     = useState<Meta | null>(null);
   const [showForm, setShowForm]           = useState(false);
+
+  // Metas Futuras
+  const [showFuturas, setShowFuturas]           = useState(true);
+  const [showFormFutura, setShowFormFutura]     = useState(false);
+  const [editingFutura, setEditingFutura]       = useState<MetaFutura | null>(null);
+  const [futuraTitulo, setFuturaTitulo]         = useState('');
+  const [futuraNotas, setFuturaNotas]           = useState('');
+  const [futuraLoading, setFuturaLoading]       = useState(false);
+  const [futuraError, setFuturaError]           = useState<string | null>(null);
 
   // form metas
   const [titulo, setTitulo]           = useState('');
@@ -160,6 +172,7 @@ export default function MetasScreen() {
     loadMetas();
     loadAllMetaRegistros();
     loadMetasConfig();
+    loadMetasFuturas();
   }, []);
 
   // Sincronizar formulario con config cargada
@@ -257,6 +270,41 @@ export default function MetasScreen() {
 
   const activeMetas   = metas.filter(m => m.activo);
   const archivedMetas = metas.filter(m => !m.activo);
+
+  const openCreateFutura = () => {
+    setEditingFutura(null);
+    setFuturaTitulo(''); setFuturaNotas(''); setFuturaError(null);
+    setShowFormFutura(true);
+  };
+
+  const openEditFutura = (m: MetaFutura) => {
+    setEditingFutura(m);
+    setFuturaTitulo(m.titulo);
+    setFuturaNotas(m.notas ?? '');
+    setFuturaError(null);
+    setShowFormFutura(true);
+  };
+
+  const handleSaveFutura = async () => {
+    if (!futuraTitulo.trim()) { setFuturaError('El título es obligatorio'); return; }
+    setFuturaLoading(true); setFuturaError(null);
+    const data = { titulo: futuraTitulo.trim(), notas: futuraNotas.trim() };
+    const err = editingFutura
+      ? await updateMetaFutura(editingFutura.id, data)
+      : await createMetaFutura(data);
+    setFuturaLoading(false);
+    if (err) { setFuturaError(err); return; }
+    setShowFormFutura(false);
+  };
+
+  const handleEliminarFutura = async (m: MetaFutura) => {
+    const ok = await confirmar(`¿Eliminar "${m.titulo}"?`);
+    if (!ok) return;
+    await eliminarMetaFutura(m.id);
+  };
+
+  const pendientesFuturas = metasFuturas.filter(m => !m.lograda);
+  const logradasFuturas   = metasFuturas.filter(m => m.lograda);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#f8fafc' }} contentContainerStyle={{ padding: 16 }}>
@@ -515,6 +563,148 @@ export default function MetasScreen() {
                         <Text style={{ flex: 1, fontSize: 13, color: '#64748b' }}>{m.titulo}</Text>
                         <Text style={{ fontSize: 12, color: '#94a3b8' }}>{m.puntuacion} pts</Text>
                       </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* ── Metas Futuras ────────────────────────────────── */}
+      <View style={cardStyle}>
+        <TouchableOpacity
+          onPress={() => setShowFuturas(!showFuturas)}
+          activeOpacity={0.8}
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}
+        >
+          <Text style={{ fontSize: 16, marginRight: 10 }}>🚀</Text>
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#1e293b' }}>
+            Metas Futuras{metasFuturas.length > 0 ? ` (${metasFuturas.length})` : ''}
+          </Text>
+          <Text style={{ color: '#94a3b8', fontSize: 14 }}>{showFuturas ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+
+        {showFuturas && (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <View style={{ height: 1, backgroundColor: '#f1f5f9', marginBottom: 12 }} />
+
+            {metasFuturasLoading ? (
+              <ActivityIndicator color="#2563eb" />
+            ) : (
+              <>
+                {pendientesFuturas.map(m => (
+                  <View key={m.id} style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingVertical: 10,
+                    borderBottomWidth: 1, borderBottomColor: '#f1f5f9',
+                  }}>
+                    <TouchableOpacity
+                      onPress={() => toggleMetaFuturaLograda(m.id, true)}
+                      style={{
+                        width: 22, height: 22, borderRadius: 11,
+                        borderWidth: 2, borderColor: '#cbd5e1',
+                        backgroundColor: '#fff', marginRight: 12,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                    />
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: '#1e293b' }}>{m.titulo}</Text>
+                      {m.notas ? (
+                        <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{m.notas}</Text>
+                      ) : null}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => openEditFutura(m)}
+                      style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, backgroundColor: '#f1f5f9', marginRight: 6 }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#475569' }}>Editar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleEliminarFutura(m)}
+                      style={{ paddingHorizontal: 8, paddingVertical: 5, borderRadius: 6, backgroundColor: '#fee2e2' }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#dc2626' }}>Eliminar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {pendientesFuturas.length === 0 && !showFormFutura && (
+                  <Text style={{ color: '#94a3b8', fontSize: 13, marginBottom: 12 }}>
+                    No hay metas futuras. ¡Anotá tus próximos sueños!
+                  </Text>
+                )}
+
+                {showFormFutura ? (
+                  <View style={{ marginTop: 14, gap: 10 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#1e293b' }}>
+                      {editingFutura ? 'Editar meta futura' : 'Nueva meta futura'}
+                    </Text>
+                    <View>
+                      <Text style={labelStyle}>Título</Text>
+                      <TextInput style={inputStyle} placeholder="Ej: Viajar a Europa"
+                        placeholderTextColor="#94a3b8" value={futuraTitulo} onChangeText={setFuturaTitulo}
+                        autoCapitalize="sentences" />
+                    </View>
+                    <View>
+                      <Text style={labelStyle}>Notas (opcional)</Text>
+                      <TextInput
+                        style={{ ...inputStyle, minHeight: 60, textAlignVertical: 'top' }}
+                        placeholder="Detalles, contexto..."
+                        placeholderTextColor="#94a3b8" value={futuraNotas} onChangeText={setFuturaNotas}
+                        multiline numberOfLines={3} />
+                    </View>
+                    {futuraError && (
+                      <View style={{ backgroundColor: '#fee2e2', borderRadius: 8, padding: 10 }}>
+                        <Text style={{ color: '#dc2626', fontSize: 13 }}>{futuraError}</Text>
+                      </View>
+                    )}
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                      <TouchableOpacity onPress={() => setShowFormFutura(false)}
+                        style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: '#f1f5f9' }}>
+                        <Text style={{ color: '#475569', fontWeight: '500' }}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleSaveFutura} disabled={futuraLoading}
+                        style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: '#2563eb' }}>
+                        {futuraLoading
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={{ color: '#fff', fontWeight: '600' }}>Guardar</Text>
+                        }
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={openCreateFutura} style={{
+                    marginTop: 12, backgroundColor: '#2563eb', borderRadius: 9,
+                    paddingVertical: 10, alignItems: 'center',
+                  }}>
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>+ Nueva meta futura</Text>
+                  </TouchableOpacity>
+                )}
+
+                {logradasFuturas.length > 0 && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={{ fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
+                      Logradas ({logradasFuturas.length})
+                    </Text>
+                    {logradasFuturas.map(m => (
+                      <TouchableOpacity
+                        key={m.id}
+                        onPress={() => toggleMetaFuturaLograda(m.id, false)}
+                        style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, opacity: 0.6 }}
+                      >
+                        <View style={{
+                          width: 22, height: 22, borderRadius: 11,
+                          backgroundColor: '#16a34a', marginRight: 12,
+                          alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓</Text>
+                        </View>
+                        <Text style={{ flex: 1, fontSize: 13, color: '#64748b', textDecorationLine: 'line-through' }}>
+                          {m.titulo}
+                        </Text>
+                      </TouchableOpacity>
                     ))}
                   </View>
                 )}
