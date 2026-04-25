@@ -144,7 +144,7 @@ export default function MetasScreen() {
   const [showForm, setShowForm]           = useState(false);
 
   // Metas Futuras
-  const [showFuturas, setShowFuturas]           = useState(true);
+  const [showFuturas, setShowFuturas]           = useState(false);
   const [showFormFutura, setShowFormFutura]     = useState(false);
   const [editingFutura, setEditingFutura]       = useState<MetaFutura | null>(null);
   const [futuraTitulo, setFuturaTitulo]         = useState('');
