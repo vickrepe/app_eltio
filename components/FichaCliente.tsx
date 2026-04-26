@@ -1201,6 +1201,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               flexDirection: 'row', alignItems: 'center',
               paddingHorizontal: isNarrow ? 8 : 28, paddingVertical: 8,
               borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f1f5f9',
+              ...(Platform.OS === 'web' ? { position: 'sticky' as any, top: 0, zIndex: 10 } : {}),
             }}>
               <Text style={{ width: col.fecha, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>FECHA</Text>
               <Text style={{ width: col.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'SALIDA\nDINERO'}</Text>
