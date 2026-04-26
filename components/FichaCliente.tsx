@@ -1183,8 +1183,8 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
       </View>
 
       {/* Tabla */}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ minWidth: MIN_TABLE_WIDTH }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ minWidth: MIN_TABLE_WIDTH, flex: 1 }}>
+        <View style={{ minWidth: MIN_TABLE_WIDTH, flex: 1 }}>
         {transactionsLoading ? (
           <View style={{ padding: 40, alignItems: 'center' }}>
             <ActivityIndicator color="#2563eb" />
@@ -1195,13 +1195,12 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
             <Text style={{ color: '#94a3b8' }}>Sin movimientos todavía</Text>
           </View>
         ) : (
-          <View style={{ minWidth: MIN_TABLE_WIDTH }}>
-            {/* Encabezado */}
+          <>
+            {/* Encabezado fijo — fuera del scroll vertical */}
             <View style={{
               flexDirection: 'row', alignItems: 'center',
               paddingHorizontal: isNarrow ? 8 : 28, paddingVertical: 8,
               borderBottomWidth: 1, borderBottomColor: '#e2e8f0', backgroundColor: '#f1f5f9',
-              ...(Platform.OS === 'web' ? { position: 'sticky' as any, top: 0, zIndex: 10 } : {}),
             }}>
               <Text style={{ width: col.fecha, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase' }}>FECHA</Text>
               <Text style={{ width: col.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'SALIDA\nDINERO'}</Text>
@@ -1214,7 +1213,8 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               <View style={{ width: col.trash }} />
             </View>
 
-            {/* Filas: agrupadas por día solo en negocio, planas en agencia */}
+            {/* Filas — scroll vertical independiente */}
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} nestedScrollEnabled>
             {variant !== 'negocio' && txsConSaldo.map((tx) => (
               <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} variant={variant} />
             ))}
@@ -1318,9 +1318,10 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
                 );
               });
             })()}
-          </View>
+            </ScrollView>
+          </>
         )}
-        </ScrollView>
+        </View>
       </ScrollView>
 
       {/* Modal nuevo movimiento */}
