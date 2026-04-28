@@ -219,7 +219,7 @@ function MovimientoForm({
   currentSaldo?: number;
   onClose: () => void;
 }) {
-  const { createTransaction, negocioTipos, loadNegocioTipos, saveNegocioTipo, agenciaTipos, loadAgenciaTipos, saveAgenciaTipo } = useAppStore();
+  const { createTransaction, negocioTipos, loadNegocioTipos, saveNegocioTipo, deleteNegocioTipo, agenciaTipos, loadAgenciaTipos, saveAgenciaTipo, deleteAgenciaTipo } = useAppStore();
   const [debe, setDebe]       = useState('');
   const [entrega, setEntrega] = useState('');
   const [obs, setObs]         = useState('');
@@ -230,6 +230,7 @@ function MovimientoForm({
   const [customNombre, setCustomNombre] = useState('');
   const [savingTipo, setSavingTipo]     = useState(false);
   const [tipoGuardado, setTipoGuardado] = useState(false);
+  const [hoveredTipo, setHoveredTipo]   = useState<string | null>(null);
 
   const isNegocio = variant === 'negocio';
 
@@ -241,6 +242,20 @@ function MovimientoForm({
   const customGuardados    = negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n));
   const tiposDisponibles   = [...TIPOS_FIJOS, ...customGuardados, 'Personalizado'];
   const tiposAgencia       = [...agenciaTipos.map(t => t.nombre), 'Personalizado'];
+
+  const handleDeleteTipo = async (nombre: string) => {
+    const ok = await confirmar(`¿Eliminar la etiqueta "${nombre}"?`);
+    if (!ok) return;
+    const tipo = isNegocio
+      ? negocioTipos.find(t => t.nombre === nombre)
+      : agenciaTipos.find(t => t.nombre === nombre);
+    if (!tipo) return;
+    const err = isNegocio
+      ? await deleteNegocioTipo(tipo.id)
+      : await deleteAgenciaTipo(tipo.id);
+    if (err) Alert.alert('Error', err);
+    if (selectedTipo === nombre) setSelectedTipo('');
+  };
 
   const handleGuardarTipoNuevo = async () => {
     if (!customNombre.trim()) return;
@@ -324,29 +339,52 @@ function MovimientoForm({
           <Text style={labelStyle}>Etiqueta (opcional)</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {(isNegocio ? tiposDisponibles : tiposAgencia).map((t) => {
-              const active = selectedTipo === t;
+              const active    = selectedTipo === t;
+              const isDeletable = t !== 'Personalizado' && !TIPOS_FIJOS.includes(t);
+              const isHovered = hoveredTipo === t;
               return (
-                <TouchableOpacity
-                  key={t}
-                  onPress={() => {
-                    setSelectedTipo(active ? '' : t);
-                    setTipoGuardado(false);
-                    if (t !== 'Personalizado') setCustomNombre('');
-                  }}
-                  style={{
-                    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
-                    borderWidth: 1.5,
-                    borderColor: active ? '#dc2626' : '#e2e8f0',
-                    backgroundColor: active ? '#fee2e2' : '#f8fafc',
-                  }}
-                >
-                  <Text style={{
-                    fontSize: 13, fontWeight: active ? '600' : '400',
-                    color: active ? '#dc2626' : '#64748b',
-                  }}>
-                    {t}
-                  </Text>
-                </TouchableOpacity>
+                <View
+                key={t}
+                style={{ position: 'relative' }}
+                // @ts-ignore
+                onMouseEnter={() => isDeletable && setHoveredTipo(t)}
+                onMouseLeave={() => setHoveredTipo(null)}
+              >
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedTipo(active ? '' : t);
+                      setTipoGuardado(false);
+                      if (t !== 'Personalizado') setCustomNombre('');
+                    }}
+                    onLongPress={() => isDeletable && handleDeleteTipo(t)}
+                    style={{
+                      paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
+                      borderWidth: 1.5,
+                      borderColor: active ? '#dc2626' : '#e2e8f0',
+                      backgroundColor: active ? '#fee2e2' : '#f8fafc',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 13, fontWeight: active ? '600' : '400',
+                      color: active ? '#dc2626' : '#64748b',
+                    }}>
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                  {isDeletable && isHovered && (
+                    <TouchableOpacity
+                      onPress={() => handleDeleteTipo(t)}
+                      style={{
+                        position: 'absolute', top: -5, right: -5,
+                        width: 16, height: 16, borderRadius: 8,
+                        backgroundColor: '#ef4444',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 11 }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               );
             })}
           </View>

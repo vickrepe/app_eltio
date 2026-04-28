@@ -74,6 +74,8 @@ interface AppState {
   agenciaTipos:      AgenciaTipo[];
   loadAgenciaTipos:  () => Promise<void>;
   saveAgenciaTipo:   (nombre: string) => Promise<string | null>;
+  deleteAgenciaTipo: (id: string) => Promise<string | null>;
+  deleteNegocioTipo: (id: string) => Promise<string | null>;
 
   // Metas
   metas:              Meta[];
@@ -474,6 +476,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     if (error) return error.message;
     await get().loadAgenciaTipos();
+    return null;
+  },
+
+  deleteAgenciaTipo: async (id) => {
+    const { error } = await supabase.from('agencia_tipos').delete().eq('id', id);
+    if (error) return error.message;
+    await get().loadAgenciaTipos();
+    return null;
+  },
+
+  deleteNegocioTipo: async (id) => {
+    const { error } = await supabase.from('negocio_tipos').delete().eq('id', id);
+    if (error) return error.message;
+    await get().loadNegocioTipos();
     return null;
   },
 
