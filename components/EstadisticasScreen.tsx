@@ -47,6 +47,13 @@ function monthAgo(): string {
   return d.toISOString().slice(0, 10);
 }
 
+function startOfWeek(): string {
+  const d = new Date();
+  const day = d.getDay() || 7; // lunes = 1
+  d.setDate(d.getDate() - (day - 1));
+  return d.toISOString().slice(0, 10);
+}
+
 export default function EstadisticasScreen({ variant }: Props) {
   const { cajaClient, cajaNegoClient, agenciaTipos, negocioTipos, loadAgenciaTipos, loadNegocioTipos, loadCaja, loadCajaNego } = useAppStore();
 
@@ -137,7 +144,7 @@ export default function EstadisticasScreen({ variant }: Props) {
     <ScrollView style={{ flex: 1, backgroundColor: Colors.background }} contentContainerStyle={{ padding: 16 }}>
 
       {/* Filtros de fecha */}
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <View style={{ flex: 1, minWidth: 140 }}>
           <DateField
             label="Desde"
@@ -156,6 +163,26 @@ export default function EstadisticasScreen({ variant }: Props) {
             labelStyle={styles.label}
           />
         </View>
+      </View>
+
+      {/* Accesos rápidos de fecha */}
+      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+        {([
+          { label: 'Hoy',         desde: today(),        hasta: today() },
+          { label: 'Esta semana', desde: startOfWeek(),  hasta: today() },
+          { label: 'Último mes',  desde: monthAgo(),     hasta: today() },
+        ] as const).map(({ label, desde, hasta }) => {
+          const active = fechaDesde === desde && fechaHasta === hasta;
+          return (
+            <TouchableOpacity
+              key={label}
+              onPress={() => { setFechaDesde(desde); setFechaHasta(hasta); }}
+              style={[styles.pill, active && styles.pillActive]}
+            >
+              <Text style={[styles.pillText, active && styles.pillActiveText]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Filtro por etiqueta */}

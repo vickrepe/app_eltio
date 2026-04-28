@@ -1088,6 +1088,7 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
   const [hoverEditar, setHoverEditar]     = useState(false);
   const [hoverEnviar, setHoverEnviar]     = useState(false);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
 
   const toggleDate = (fecha: string) => {
     setExpandedDates(prev => {
@@ -1107,6 +1108,18 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
 
   const col = useColWidths(variant);
   const txsConSaldo = calcularSaldos(transactions);
+  const txsFiltrados = search.trim()
+    ? txsConSaldo.filter(t => {
+        const q = search.toLowerCase();
+        return (
+          (t.observaciones ?? '').toLowerCase().includes(q) ||
+          (t.tipo ?? '').toLowerCase().includes(q) ||
+          t.fecha.includes(q) ||
+          String(t.debe).includes(q) ||
+          String(t.entrega).includes(q)
+        );
+      })
+    : txsConSaldo;
 
   const ultimoDebe    = transactions.find((t) => t.debe > 0 && !t.anulada);
   const ultimaEntrega = transactions.find((t) => t.entrega > 0 && !t.anulada);
@@ -1220,6 +1233,30 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
         </View>
       </View>
 
+      {/* Buscador */}
+      {!transactionsLoading && txsConSaldo.length > 0 && (
+        <View style={{
+          flexDirection: 'row', alignItems: 'center',
+          marginHorizontal: isNarrow ? 8 : 28, marginTop: 10, marginBottom: 2,
+          backgroundColor: '#f8fafc', borderRadius: 8,
+          borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 10,
+        }}>
+          <Text style={{ color: '#94a3b8', marginRight: 6 }}>🔍</Text>
+          <TextInput
+            style={{ flex: 1, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
+            placeholder="Buscar movimiento..."
+            placeholderTextColor="#94a3b8"
+            value={search}
+            onChangeText={setSearch}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Text style={{ color: '#94a3b8', fontSize: 16, paddingLeft: 6 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* Tabla */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ minWidth: MIN_TABLE_WIDTH, flex: 1 }}>
         <View style={{ minWidth: MIN_TABLE_WIDTH, flex: 1 }}>
@@ -1253,20 +1290,38 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
 
             {/* Filas — scroll vertical independiente */}
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }} nestedScrollEnabled>
-            {variant !== 'negocio' && txsConSaldo.map((tx) => (
+            {variant !== 'negocio' && txsFiltrados.map((tx) => (
               <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} variant={variant} />
             ))}
+            {variant !== 'negocio' && txsFiltrados.length === 0 && search.trim() && (
+              <View style={{ padding: 32, alignItems: 'center' }}>
+                <Text style={{ color: '#94a3b8' }}>Sin resultados para "{search}"</Text>
+              </View>
+            )}
             {variant === 'negocio' && (() => {
               const hoy = todayISO();
-              // Agrupar por fecha manteniendo orden descendente
               const grupos: Record<string, TransactionWithSaldo[]> = {};
-              for (const tx of txsConSaldo) {
+              for (const tx of txsFiltrados) {
                 if (!grupos[tx.fecha]) grupos[tx.fecha] = [];
                 grupos[tx.fecha].push(tx);
               }
               const fechas = Object.keys(grupos).sort((a, b) => b.localeCompare(a));
               const fs = isNarrow ? 11 : 13;
               const ph = isNarrow ? 8 : 28;
+
+              if (txsFiltrados.length === 0 && search.trim()) {
+                return (
+                  <View style={{ padding: 32, alignItems: 'center' }}>
+                    <Text style={{ color: '#94a3b8' }}>Sin resultados para "{search}"</Text>
+                  </View>
+                );
+              }
+
+              if (search.trim()) {
+                return txsFiltrados.map(tx => (
+                  <FilaTransaccion key={tx.id} tx={tx} clientId={client.id} variant={variant} />
+                ));
+              }
 
               return fechas.map((fecha) => {
                 const txsDia   = grupos[fecha];
