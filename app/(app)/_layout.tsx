@@ -59,6 +59,13 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="estadisticas"
+        options={{
+          title: 'Estadísticas',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',

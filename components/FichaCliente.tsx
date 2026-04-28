@@ -127,7 +127,7 @@ const TIPOS_FIJOS = ['Ventas', 'Empleados', 'Gastos Casa', 'Proveedores'];
 
 // ─── DateField ───────────────────────────────────────────────
 
-function DateField({
+export function DateField({
   value, onChange, label, inputStyle, labelStyle,
 }: {
   value: string;          // ISO: YYYY-MM-DD
