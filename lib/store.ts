@@ -1,7 +1,7 @@
 import { Session, User } from '@supabase/supabase-js';
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Client, Meta, MetaFutura, MetaRegistro, MetasConfig, NegocioTipo, Organization, Profile, Transaction } from '../types';
+import type { AgenciaTipo, Client, Meta, MetaFutura, MetaRegistro, MetasConfig, NegocioTipo, Organization, Profile, Transaction } from '../types';
 
 interface AppState {
   // Auth
@@ -70,6 +70,11 @@ interface AppState {
   loadNegocioTipos:  () => Promise<void>;
   saveNegocioTipo:   (nombre: string) => Promise<string | null>;
 
+  // Tipos personalizados agencia
+  agenciaTipos:      AgenciaTipo[];
+  loadAgenciaTipos:  () => Promise<void>;
+  saveAgenciaTipo:   (nombre: string) => Promise<string | null>;
+
   // Metas
   metas:              Meta[];
   metasLoading:       boolean;
@@ -111,6 +116,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   transactionsLoading: false,
   orgUsers:         [],
   negocioTipos:     [],
+  agenciaTipos:     [],
   metas:            [],
   metasLoading:     false,
   metaRegistros:    [],
@@ -445,6 +451,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     if (error) return error.message;
     await get().loadNegocioTipos();
+    return null;
+  },
+
+  loadAgenciaTipos: async () => {
+    const { organization } = get();
+    if (!organization) return;
+    const { data } = await supabase
+      .from('agencia_tipos')
+      .select('*')
+      .eq('org_id', organization.id)
+      .order('created_at');
+    if (data) set({ agenciaTipos: data as AgenciaTipo[] });
+  },
+
+  saveAgenciaTipo: async (nombre) => {
+    const { organization } = get();
+    if (!organization) return 'Sin organización activa';
+    const { error } = await supabase.from('agencia_tipos').insert({
+      org_id: organization.id,
+      nombre: nombre.trim(),
+    });
+    if (error) return error.message;
+    await get().loadAgenciaTipos();
     return null;
   },
 

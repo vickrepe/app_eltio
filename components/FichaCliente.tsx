@@ -49,8 +49,7 @@ function useColWidths(variant?: string) {
   const available = tableWidth - ph * 2 - OBS_WIDTH - trash;
   // Proporciones base
   const base = { fecha: 80, debe: 72, entrega: 72, saldo: 72, tipo: 88 };
-  const total = base.fecha + base.debe + base.entrega + base.saldo
-    + (isNegocio ? base.tipo : 0);
+  const total = base.fecha + base.debe + base.entrega + base.saldo + base.tipo;
   return {
     fecha:   Math.round(available * base.fecha   / total),
     debe:    Math.round(available * base.debe    / total),
@@ -220,14 +219,13 @@ function MovimientoForm({
   currentSaldo?: number;
   onClose: () => void;
 }) {
-  const { createTransaction, negocioTipos, loadNegocioTipos, saveNegocioTipo } = useAppStore();
+  const { createTransaction, negocioTipos, loadNegocioTipos, saveNegocioTipo, agenciaTipos, loadAgenciaTipos, saveAgenciaTipo } = useAppStore();
   const [debe, setDebe]       = useState('');
   const [entrega, setEntrega] = useState('');
   const [obs, setObs]         = useState('');
   const [fecha, setFecha]     = useState(todayISO());
   const [loading, setLoading] = useState(false);
 
-  // Tipo (negocio only)
   const [selectedTipo, setSelectedTipo] = useState('');
   const [customNombre, setCustomNombre] = useState('');
   const [savingTipo, setSavingTipo]     = useState(false);
@@ -237,17 +235,22 @@ function MovimientoForm({
 
   useEffect(() => {
     if (isNegocio) loadNegocioTipos();
+    else loadAgenciaTipos();
   }, []);
 
-  const customGuardados = negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n));
-  const tiposDisponibles = [...TIPOS_FIJOS, ...customGuardados, 'Personalizado'];
+  const customGuardados    = negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n));
+  const tiposDisponibles   = [...TIPOS_FIJOS, ...customGuardados, 'Personalizado'];
+  const tiposAgencia       = [...agenciaTipos.map(t => t.nombre), 'Personalizado'];
 
   const handleGuardarTipoNuevo = async () => {
     if (!customNombre.trim()) return;
     setSavingTipo(true);
-    const err = await saveNegocioTipo(customNombre.trim());
+    const err = isNegocio
+      ? await saveNegocioTipo(customNombre.trim())
+      : await saveAgenciaTipo(customNombre.trim());
     setSavingTipo(false);
-    if (!err) setTipoGuardado(true);
+    if (err) { Alert.alert('Error al guardar etiqueta', err); return; }
+    setTipoGuardado(true);
   };
 
   const handleGuardar = async () => {
@@ -257,9 +260,9 @@ function MovimientoForm({
       Alert.alert('Error', 'Ingresá al menos un monto en Salida o Entrada');
       return;
     }
-    const tipo = isNegocio
-      ? (selectedTipo === 'Personalizado' ? customNombre.trim() || undefined : selectedTipo || undefined)
-      : undefined;
+    const tipo = selectedTipo === 'Personalizado'
+      ? customNombre.trim() || undefined
+      : selectedTipo || undefined;
     setLoading(true);
     const err = await createTransaction({
       client_id: clientId, debe: debeNum, entrega: entregaNum,
@@ -316,70 +319,67 @@ function MovimientoForm({
           labelStyle={labelStyle}
         />
 
-        {/* Tipo — solo en negocio */}
-        {isNegocio && (
-          <View>
-            <Text style={labelStyle}>Tipo</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {tiposDisponibles.map((t) => {
-                const active = selectedTipo === t;
-                return (
-                  <TouchableOpacity
-                    key={t}
-                    onPress={() => {
-                      setSelectedTipo(active ? '' : t);
-                      setTipoGuardado(false);
-                      if (t !== 'Personalizado') setCustomNombre('');
-                    }}
-                    style={{
-                      paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
-                      borderWidth: 1.5,
-                      borderColor: active ? '#dc2626' : '#e2e8f0',
-                      backgroundColor: active ? '#fee2e2' : '#f8fafc',
-                    }}
-                  >
-                    <Text style={{
-                      fontSize: 13, fontWeight: active ? '600' : '400',
-                      color: active ? '#dc2626' : '#64748b',
-                    }}>
-                      {t}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Campo personalizado */}
-            {selectedTipo === 'Personalizado' && (
-              <View style={{ marginTop: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TextInput
-                  style={[inputStyle, { flex: 1, paddingVertical: 8, fontSize: 14 }]}
-                  placeholder="Nombre del tipo de gasto"
-                  placeholderTextColor="#94a3b8"
-                  value={customNombre}
-                  onChangeText={(v) => { setCustomNombre(v); setTipoGuardado(false); }}
-                  autoCapitalize="sentences"
-                />
+        {/* Etiqueta */}
+        <View>
+          <Text style={labelStyle}>Etiqueta (opcional)</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {(isNegocio ? tiposDisponibles : tiposAgencia).map((t) => {
+              const active = selectedTipo === t;
+              return (
                 <TouchableOpacity
-                  onPress={handleGuardarTipoNuevo}
-                  disabled={savingTipo || tipoGuardado || !customNombre.trim()}
+                  key={t}
+                  onPress={() => {
+                    setSelectedTipo(active ? '' : t);
+                    setTipoGuardado(false);
+                    if (t !== 'Personalizado') setCustomNombre('');
+                  }}
                   style={{
-                    paddingHorizontal: 10, paddingVertical: 9, borderRadius: 8,
-                    backgroundColor: tipoGuardado ? '#dcfce7' : '#fff7ed',
-                    opacity: !customNombre.trim() ? 0.5 : 1,
+                    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
+                    borderWidth: 1.5,
+                    borderColor: active ? '#dc2626' : '#e2e8f0',
+                    backgroundColor: active ? '#fee2e2' : '#f8fafc',
                   }}
                 >
-                  {savingTipo
-                    ? <ActivityIndicator size="small" color="#ea580c" />
-                    : <Text style={{ fontSize: 12, fontWeight: '600', color: tipoGuardado ? '#16a34a' : '#ea580c' }}>
-                        {tipoGuardado ? '✓ Guardado' : 'Guardar tipo'}
-                      </Text>
-                  }
+                  <Text style={{
+                    fontSize: 13, fontWeight: active ? '600' : '400',
+                    color: active ? '#dc2626' : '#64748b',
+                  }}>
+                    {t}
+                  </Text>
                 </TouchableOpacity>
-              </View>
-            )}
+              );
+            })}
           </View>
-        )}
+
+          {selectedTipo === 'Personalizado' && (
+            <View style={{ marginTop: 8, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <TextInput
+                style={[inputStyle, { flex: 1, paddingVertical: 8, fontSize: 14 }]}
+                placeholder="Nombre de la etiqueta"
+                placeholderTextColor="#94a3b8"
+                value={customNombre}
+                onChangeText={(v) => { setCustomNombre(v); setTipoGuardado(false); }}
+                autoCapitalize="sentences"
+              />
+              <TouchableOpacity
+                onPress={handleGuardarTipoNuevo}
+                disabled={savingTipo || tipoGuardado || !customNombre.trim()}
+                style={{
+                  paddingHorizontal: 10, paddingVertical: 9, borderRadius: 8,
+                  backgroundColor: tipoGuardado ? '#dcfce7' : '#fff7ed',
+                  opacity: !customNombre.trim() ? 0.5 : 1,
+                }}
+              >
+                {savingTipo
+                  ? <ActivityIndicator size="small" color="#ea580c" />
+                  : <Text style={{ fontSize: 12, fontWeight: '600', color: tipoGuardado ? '#16a34a' : '#ea580c' }}>
+                      {tipoGuardado ? '✓ Guardado' : 'Guardar etiqueta'}
+                    </Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         <View>
           <Text style={labelStyle}>Observaciones</Text>
@@ -409,7 +409,7 @@ function MovimientoForm({
 // ─── FilaTransaccion ─────────────────────────────────────────
 
 function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; clientId: string; variant?: string }) {
-  const { cancelarTransaccion, updateTransaction, negocioTipos, loadNegocioTipos } = useAppStore();
+  const { cancelarTransaccion, updateTransaction, negocioTipos, loadNegocioTipos, agenciaTipos, loadAgenciaTipos } = useAppStore();
   const [hoverTrash, setHoverTrash] = useState(false);
   // 'none' | 'info' | 'edit' — single modal, two views
   const [modalMode, setModalMode]   = useState<'none' | 'info' | 'edit'>('none');
@@ -461,6 +461,7 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
 
   useEffect(() => {
     if (variant === 'negocio') loadNegocioTipos();
+    else loadAgenciaTipos();
   }, []);
 
   const handleEliminar = async () => {
@@ -586,36 +587,37 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
                     inputStyle={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
                     labelStyle={{ fontSize: 12, color: '#64748b', fontWeight: '500' as const, marginBottom: 4 }}
                   />
-                  {variant === 'negocio' && (
-                    <View>
-                      <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Tipo</Text>
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                        {[...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado'].map((t) => {
-                          const active = editTipo === t;
-                          return (
-                            <TouchableOpacity
-                              key={t}
-                              onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
-                              style={{
-                                paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
-                                borderColor: active ? '#dc2626' : '#e2e8f0',
-                                backgroundColor: active ? '#fee2e2' : '#f8fafc',
-                              }}
-                            >
-                              <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>{t}</Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                      {editTipo === 'Personalizado' && (
-                        <TextInput
-                          style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
-                          placeholder="Nombre del tipo de gasto" placeholderTextColor="#94a3b8"
-                          value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
-                        />
-                      )}
+                  <View>
+                    <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Etiqueta</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                      {(variant === 'negocio'
+                        ? [...TIPOS_FIJOS, ...negocioTipos.map(t => t.nombre).filter(n => !TIPOS_FIJOS.includes(n)), 'Personalizado']
+                        : [...agenciaTipos.map(t => t.nombre), 'Personalizado']
+                      ).map((t) => {
+                        const active = editTipo === t;
+                        return (
+                          <TouchableOpacity
+                            key={t}
+                            onPress={() => { setEditTipo(active ? '' : t); if (t !== 'Personalizado') setEditCustom(''); }}
+                            style={{
+                              paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5,
+                              borderColor: active ? '#dc2626' : '#e2e8f0',
+                              backgroundColor: active ? '#fee2e2' : '#f8fafc',
+                            }}
+                          >
+                            <Text style={{ fontSize: 13, fontWeight: active ? '600' : '400', color: active ? '#dc2626' : '#64748b' }}>{t}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                  )}
+                    {editTipo === 'Personalizado' && (
+                      <TextInput
+                        style={{ marginTop: 8, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1e293b' }}
+                        placeholder="Nombre de la etiqueta" placeholderTextColor="#94a3b8"
+                        value={editCustom} onChangeText={setEditCustom} autoCapitalize="sentences"
+                      />
+                    )}
+                  </View>
                   <View>
                     <Text style={{ fontSize: 12, color: '#64748b', fontWeight: '500', marginBottom: 4 }}>Observaciones</Text>
                     <TextInput
@@ -684,22 +686,20 @@ function FilaTransaccion({ tx, clientId, variant }: { tx: TransactionWithSaldo; 
           {formatSaldo(tx.saldo_acumulado)}
         </Text>
       </AmountCell>
-      {variant === 'negocio' && (
-        <TouchableOpacity
-          onPress={() => setModalMode('info')}
-          style={{ width: col.tipo, paddingHorizontal: 4 }}
-          activeOpacity={0.7}
-        >
-          <Text style={{
-            fontSize: fs,
-            color: tx.tipo ? '#2563eb' : '#cbd5e1',
-            fontWeight: tx.tipo ? '600' : '400',
-            textDecorationLine: tx.tipo ? 'underline' : 'none',
-          }} numberOfLines={1}>
-            {tx.tipo ?? '—'}
-          </Text>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        onPress={() => setModalMode('info')}
+        style={{ width: col.tipo, paddingHorizontal: 4 }}
+        activeOpacity={0.7}
+      >
+        <Text style={{
+          fontSize: fs,
+          color: tx.tipo ? '#2563eb' : '#cbd5e1',
+          fontWeight: tx.tipo ? '600' : '400',
+          textDecorationLine: tx.tipo ? 'underline' : 'none',
+        }} numberOfLines={1}>
+          {tx.tipo ?? '—'}
+        </Text>
+      </TouchableOpacity>
       <Text style={{ width: col.obs, fontSize: fs, color: '#94a3b8', paddingLeft: 8, flexWrap: 'wrap' }}>
         {tx.observaciones ?? '—'}
       </Text>
@@ -1206,9 +1206,9 @@ export function ClienteDetalle({ client, variant = 'agencia' }: { client: Client
               <Text style={{ width: col.debe, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'SALIDA\nDINERO'}</Text>
               <Text style={{ width: col.entrega, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>{'ENTRADA\nDINERO'}</Text>
               <Text style={{ width: col.saldo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'right' }}>SALDO</Text>
-              {variant === 'negocio' && (
-                <Text style={{ width: col.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>TIPO</Text>
-              )}
+              <Text style={{ width: col.tipo, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', textAlign: 'center' }}>
+                {variant === 'negocio' ? 'TIPO' : 'ETIQUETA'}
+              </Text>
               <Text style={{ width: col.obs, fontSize: 10, fontWeight: '600', color: '#64748b', textTransform: 'uppercase', paddingLeft: 4 }}>OBSERVACIONES</Text>
               <View style={{ width: col.trash }} />
             </View>

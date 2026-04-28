@@ -51,6 +51,13 @@ export interface NegocioTipo {
   created_at: string;
 }
 
+export interface AgenciaTipo {
+  id: string;
+  org_id: string;
+  nombre: string;
+  created_at: string;
+}
+
 // Saldo acumulado por fila para mostrar en tabla
 export interface TransactionWithSaldo extends Transaction {
   saldo_acumulado: number;
