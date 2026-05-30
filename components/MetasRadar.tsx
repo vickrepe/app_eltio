@@ -1,5 +1,5 @@
-import { View, Text } from 'react-native';
-import Svg, { Polygon, Line, Circle, Text as SvgText } from 'react-native-svg';
+import { View } from 'react-native';
+import Svg, { Polygon, Line, Circle, Text as SvgText, TSpan } from 'react-native-svg';
 import type { Meta, MetaRegistro } from '../types';
 
 // ── helpers de fecha ──────────────────────────────────────────
@@ -70,23 +70,43 @@ export function computeMetaPcts(metas: Meta[], registros: MetaRegistro[]): MetaP
 }
 
 // ── componente radar ──────────────────────────────────────────
+// El SVG usa un viewBox fijo y escala al ancho del contenedor (responsivo),
+// así nada se corta en pantallas chicas.
 
-const SIZE   = 260;
-const CENTER = SIZE / 2;
-const RADIUS = 96;          // radio máximo (100%)
+const VB_W   = 310;          // ancho del viewBox
+const VB_H   = 285;          // alto del viewBox
+const CX     = VB_W / 2;
+const CY     = 135;          // centro vertical (deja aire para etiquetas de arriba)
+const RADIUS = 84;           // radio máximo (100%)
+const LBL_R  = RADIUS + 12;  // distancia de las etiquetas al centro
+const LINE_H = 11;           // alto de línea de las etiquetas
 const RINGS  = [0.25, 0.5, 0.75, 1];
 
 function polar(angle: number, r: number): { x: number; y: number } {
   // angle en radianes, 0 = arriba, sentido horario
   return {
-    x: CENTER + r * Math.sin(angle),
-    y: CENTER - r * Math.cos(angle),
+    x: CX + r * Math.sin(angle),
+    y: CY - r * Math.cos(angle),
   };
 }
 
-// Recorta una etiqueta larga
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+// Parte un título en varias líneas (máx 3) sin cortar palabras, agrupando
+// palabras cortas hasta `maxChars`. Ej: "Actividad física" -> ["Actividad","física"]
+function wrapLabel(s: string, maxChars = 10): string[] {
+  const words = s.trim().split(/\s+/);
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    if (!cur) cur = w;
+    else if ((cur + ' ' + w).length <= maxChars) cur += ' ' + w;
+    else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > 3) {
+    lines.length = 3;
+    lines[2] = lines[2].slice(0, maxChars - 1) + '…';
+  }
+  return lines;
 }
 
 export default function MetasRadar({ data }: { data: MetaPct[] }) {
@@ -111,8 +131,8 @@ export default function MetasRadar({ data }: { data: MetaPct[] }) {
   );
 
   return (
-    <View style={{ alignItems: 'center' }}>
-      <Svg width={SIZE} height={SIZE}>
+    <View style={{ width: '100%', aspectRatio: VB_W / VB_H }}>
+      <Svg width="100%" height="100%" viewBox={`0 0 ${VB_W} ${VB_H}`}>
         {/* anillos de guía */}
         {ringPolys.map((pts, i) => (
           <Polygon
@@ -130,7 +150,7 @@ export default function MetasRadar({ data }: { data: MetaPct[] }) {
           return (
             <Line
               key={`axis-${i}`}
-              x1={CENTER} y1={CENTER}
+              x1={CX} y1={CY}
               x2={p.x} y2={p.y}
               stroke="#e2e8f0"
               strokeWidth={1}
@@ -154,50 +174,32 @@ export default function MetasRadar({ data }: { data: MetaPct[] }) {
           );
         })}
 
-        {/* etiquetas de cada meta */}
+        {/* etiquetas de cada meta (multilínea, sin cortar palabras) */}
         {data.map((d, i) => {
-          const angle = i * step;
-          const p = polar(angle, RADIUS + 16);
-          const sin = Math.sin(angle);
-          const anchor = Math.abs(sin) < 0.1 ? 'middle' : sin > 0 ? 'start' : 'end';
+          const angle  = i * step;
+          const p      = polar(angle, LBL_R);
+          const sin    = Math.sin(angle);
+          const anchor = Math.abs(sin) < 0.25 ? 'middle' : sin > 0 ? 'start' : 'end';
+          const lines  = wrapLabel(d.meta.titulo);
+          const startY = p.y - ((lines.length - 1) * LINE_H) / 2;
           return (
             <SvgText
               key={`lbl-${i}`}
               x={p.x}
-              y={p.y}
-              fontSize={10}
+              y={startY}
+              fontSize={9}
               fontWeight="600"
               fill="#475569"
               textAnchor={anchor as any}
               alignmentBaseline="middle"
             >
-              {truncate(d.meta.titulo, 12)}
+              {lines.map((ln, j) => (
+                <TSpan key={j} x={p.x} dy={j === 0 ? 0 : LINE_H}>{ln}</TSpan>
+              ))}
             </SvgText>
           );
         })}
       </Svg>
-
-      {/* leyenda con el % de cada meta */}
-      <View style={{ width: '100%', marginTop: 8, gap: 6 }}>
-        {data.map(d => {
-          const pctTxt = Math.round(d.pct * 100);
-          const color = pctTxt >= 80 ? '#16a34a' : pctTxt >= 50 ? '#ca8a04' : '#dc2626';
-          return (
-            <View key={d.meta.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 8 }} />
-              <Text style={{ flex: 1, fontSize: 13, color: '#475569' }} numberOfLines={1}>
-                {d.meta.titulo}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#94a3b8', marginRight: 8 }}>
-                {d.diasCumplidos}/{d.diasTotales}d
-              </Text>
-              <Text style={{ fontSize: 13, fontWeight: '700', color }}>
-                {pctTxt}%
-              </Text>
-            </View>
-          );
-        })}
-      </View>
     </View>
   );
 }

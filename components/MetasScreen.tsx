@@ -141,6 +141,7 @@ export default function MetasScreen() {
 
   const [expandedDays, setExpandedDays]   = useState<Set<string>>(new Set([today]));
   const [showRadar, setShowRadar]         = useState(false);
+  const [showPorcentaje, setShowPorcentaje] = useState(false);
   const [showGestionar, setShowGestionar] = useState(false);
   const [editingMeta, setEditingMeta]     = useState<Meta | null>(null);
   const [showForm, setShowForm]           = useState(false);
@@ -768,7 +769,44 @@ export default function MetasScreen() {
                 })}
               </>
             ) : (
-              <MetasRadar data={radarData} />
+              <>
+                <MetasRadar data={radarData} />
+
+                {/* Desplegable opcional con los porcentajes */}
+                <TouchableOpacity
+                  onPress={() => setShowPorcentaje(!showPorcentaje)}
+                  activeOpacity={0.8}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingVertical: 6 }}
+                >
+                  <Text style={{ fontSize: 13, color: '#2563eb', fontWeight: '600', marginRight: 4 }}>
+                    {showPorcentaje ? 'Ocultar porcentaje' : 'Ver porcentaje'}
+                  </Text>
+                  <Text style={{ color: '#2563eb', fontSize: 12 }}>{showPorcentaje ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {showPorcentaje && (
+                  <View style={{ width: '100%', marginTop: 6, gap: 6 }}>
+                    {radarData.map(d => {
+                      const pctTxt = Math.round(d.pct * 100);
+                      const color  = pctTxt >= 80 ? '#16a34a' : pctTxt >= 50 ? '#ca8a04' : '#dc2626';
+                      return (
+                        <View key={d.meta.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, marginRight: 8 }} />
+                          <Text style={{ flex: 1, fontSize: 13, color: '#475569' }} numberOfLines={1}>
+                            {d.meta.titulo}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#94a3b8', marginRight: 8 }}>
+                            {d.diasCumplidos}/{d.diasTotales}d
+                          </Text>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color }}>
+                            {pctTxt}%
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}
