@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useAppStore } from '../lib/store';
 import type { Meta, MetaFutura, MetaRegistro } from '../types';
+import MetasRadar, { computeMetaPcts } from './MetasRadar';
 
 // ── helpers ───────────────────────────────────────────────────
 
@@ -139,6 +140,7 @@ export default function MetasScreen() {
   const days      = generateDays(startDate, today);
 
   const [expandedDays, setExpandedDays]   = useState<Set<string>>(new Set([today]));
+  const [showRadar, setShowRadar]         = useState(false);
   const [showGestionar, setShowGestionar] = useState(false);
   const [editingMeta, setEditingMeta]     = useState<Meta | null>(null);
   const [showForm, setShowForm]           = useState(false);
@@ -270,6 +272,9 @@ export default function MetasScreen() {
 
   const activeMetas   = metas.filter(m => m.activo);
   const archivedMetas = metas.filter(m => !m.activo);
+
+  // Datos del spider chart (cumplimiento por meta desde su creación)
+  const radarData = computeMetaPcts(metas, metaRegistros);
 
   const openCreateFutura = () => {
     setEditingFutura(null);
@@ -709,6 +714,61 @@ export default function MetasScreen() {
                   </View>
                 )}
               </>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* ── Spider chart (cumplimiento por meta) ─────────── */}
+      <View style={cardStyle}>
+        <TouchableOpacity
+          onPress={() => setShowRadar(!showRadar)}
+          activeOpacity={0.8}
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }}
+        >
+          <Text style={{ fontSize: 16, marginRight: 10 }}>🕸️</Text>
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#1e293b' }}>
+            Cumplimiento por meta
+          </Text>
+          <Text style={{ color: '#94a3b8', fontSize: 14 }}>{showRadar ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+
+        {showRadar && (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+            <View style={{ height: 1, backgroundColor: '#f1f5f9', marginBottom: 14 }} />
+
+            {radarData.length === 0 ? (
+              <Text style={{ color: '#94a3b8', fontSize: 13 }}>
+                No hay metas activas para graficar.
+              </Text>
+            ) : radarData.length < 3 ? (
+              <>
+                <Text style={{ color: '#94a3b8', fontSize: 12, marginBottom: 12 }}>
+                  El gráfico de araña aparece con 3 metas o más. Mientras tanto:
+                </Text>
+                {radarData.map(d => {
+                  const pctTxt = Math.round(d.pct * 100);
+                  const color  = pctTxt >= 80 ? '#16a34a' : pctTxt >= 50 ? '#ca8a04' : '#dc2626';
+                  return (
+                    <View key={d.meta.id} style={{ marginBottom: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                        <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: '#1e293b' }} numberOfLines={1}>
+                          {d.meta.titulo}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#94a3b8', marginRight: 8 }}>
+                          {d.diasCumplidos}/{d.diasTotales}d
+                        </Text>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color }}>{pctTxt}%</Text>
+                      </View>
+                      <View style={{ height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                        <View style={{ height: 8, borderRadius: 4, width: `${pctTxt}%` as any, backgroundColor: color }} />
+                      </View>
+                    </View>
+                  );
+                })}
+              </>
+            ) : (
+              <MetasRadar data={radarData} />
             )}
           </View>
         )}
